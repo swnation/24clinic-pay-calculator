@@ -15,6 +15,27 @@ function pad(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
+function ShiftBadge({ shift, doctorName, doctorColor, filtered, onClick }: {
+  shift: Shift;
+  doctorName: string;
+  doctorColor: string;
+  filtered: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[3px] rounded-sm cursor-pointer active:opacity-70 transition-opacity whitespace-nowrap overflow-hidden ${
+        filtered ? 'opacity-20' : ''
+      }`}
+      style={{ backgroundColor: doctorColor }}
+      onClick={onClick}
+    >
+      <span className="font-medium">{doctorName}</span>
+      <span className="text-gray-700 ml-0.5">({pad(shift.startHour)}-{pad(shift.endHour)})</span>
+    </div>
+  );
+}
+
 export default function Calendar({ year, month, onMonthChange }: Props) {
   const { state, getShiftsForMonth } = useAppStore();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -83,9 +104,9 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
       {/* Month navigation + import button */}
       <div className="flex items-center justify-between px-4 mb-3">
         <div className="flex items-center gap-4 sm:gap-6 flex-1 justify-center">
-          <button onClick={prevMonth} className="p-3 hover:bg-gray-100 active:bg-gray-200 rounded-lg text-2xl select-none">&lt;</button>
-          <h2 className="text-xl font-bold">{year}년 {month}월</h2>
-          <button onClick={nextMonth} className="p-3 hover:bg-gray-100 active:bg-gray-200 rounded-lg text-2xl select-none">&gt;</button>
+          <button onClick={prevMonth} className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none">&lt;</button>
+          <h2 className="text-lg sm:text-xl font-bold tracking-wide">{year}.{pad(month)}</h2>
+          <button onClick={nextMonth} className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none">&gt;</button>
         </div>
         <button
           onClick={() => setShowImport(true)}
@@ -101,7 +122,7 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
           <button
             key={d.id}
             onClick={() => toggleFilter(d.id)}
-            className={`px-2.5 py-1.5 sm:px-3 sm:py-1 rounded-full text-xs font-medium border transition-all ${
+            className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
               filterDoctors.size === 0 || filterDoctors.has(d.id)
                 ? 'border-gray-400 shadow-sm'
                 : 'border-gray-200 opacity-40'
@@ -114,22 +135,22 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
         {filterDoctors.size > 0 && (
           <button
             onClick={() => setFilterDoctors(new Set())}
-            className="px-2.5 py-1.5 sm:px-3 sm:py-1 rounded-full text-xs border border-gray-300 bg-white active:bg-gray-100"
+            className="px-2.5 py-1 rounded-full text-[11px] border border-gray-300 bg-white active:bg-gray-100"
           >
             전체보기
           </button>
         )}
       </div>
 
-      {/* Calendar grid - horizontally scrollable on very small screens */}
-      <div className="overflow-x-auto">
-        <div className="grid grid-cols-7 border-t border-l border-gray-300 min-w-[350px]">
-          {/* Day names */}
+      {/* Calendar grid */}
+      <div className="overflow-x-auto bg-white">
+        <div className="grid grid-cols-7 border-t border-l border-gray-400 min-w-[350px]">
+          {/* Day names - match original: dark bg, white text */}
           {dayNames.map((name, i) => (
             <div
               key={name}
-              className={`text-center text-xs font-bold py-1.5 sm:py-2 border-b border-r border-gray-300 ${
-                i === 0 ? 'text-red-500 bg-red-50' : i === 6 ? 'text-blue-500 bg-blue-50' : 'bg-gray-100'
+              className={`text-center text-xs font-bold py-1.5 sm:py-2 border-b border-r border-gray-400 ${
+                i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
               }`}
             >
               {name}
@@ -139,7 +160,7 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
           {/* Day cells */}
           {calendarDays.map((day, idx) => {
             if (day === null) {
-              return <div key={`e-${idx}`} className="border-b border-r border-gray-200 bg-gray-50 min-h-[70px] sm:min-h-[100px]" />;
+              return <div key={`e-${idx}`} className="border-b border-r border-gray-300 bg-white min-h-[80px] sm:min-h-[110px]" />;
             }
 
             const dateStr = `${year}-${pad(month)}-${pad(day)}`;
@@ -155,56 +176,48 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
             return (
               <div
                 key={dateStr}
-                className={`border-b border-r border-gray-200 min-h-[70px] sm:min-h-[100px] p-0.5 sm:p-1 cursor-pointer active:bg-blue-50 hover:bg-blue-50/30 transition-colors ${
-                  isToday ? 'bg-yellow-50' : ''
-                }`}
+                className={`border-b border-r border-gray-300 min-h-[80px] sm:min-h-[110px] p-1 cursor-pointer active:bg-blue-50/50 hover:bg-gray-50 transition-colors bg-white`}
                 onClick={() => setSelectedDate(dateStr)}
               >
-                {/* Date number */}
-                <div className="flex items-start justify-between mb-0.5">
-                  <span className={`text-[11px] sm:text-xs font-bold leading-none ${
-                    isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-700'
+                {/* Date number + holiday */}
+                <div className="flex items-baseline gap-1 mb-1">
+                  <span className={`text-xs sm:text-sm font-bold leading-none ${
+                    isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'
                   } ${isToday ? 'bg-blue-600 text-white! rounded-full w-5 h-5 flex items-center justify-center text-[10px]' : ''}`}>
                     {day}
                   </span>
                   {holiday && (
-                    <span className="text-[7px] sm:text-[9px] text-red-400 leading-tight hidden sm:block">{holiday}</span>
+                    <span className="text-[9px] sm:text-[10px] text-red-500 font-medium leading-none">{holiday}</span>
                   )}
                 </div>
 
-                {/* Shifts display: two columns for rooms */}
-                <div className="flex gap-px">
-                  <div className="flex-1 space-y-px">
+                {/* Shifts: two columns for rooms */}
+                <div className="flex gap-0.5">
+                  {/* Room 1 */}
+                  <div className="flex-1 space-y-0.5">
                     {room1.map(s => (
-                      <div
+                      <ShiftBadge
                         key={s.id}
-                        className={`text-[8px] sm:text-[10px] leading-tight px-0.5 sm:px-1 py-0.5 rounded cursor-pointer active:opacity-70 transition-opacity ${
-                          isFiltered(s.doctorId) ? 'opacity-20' : ''
-                        }`}
-                        style={{ backgroundColor: getDoctorColor(s.doctorId) }}
+                        shift={s}
+                        doctorName={getDoctorName(s.doctorId)}
+                        doctorColor={getDoctorColor(s.doctorId)}
+                        filtered={isFiltered(s.doctorId)}
                         onClick={(e) => { e.stopPropagation(); setEditShift(s); }}
-                      >
-                        <div className="font-medium truncate">{getDoctorName(s.doctorId)}</div>
-                        <div className="text-gray-600 hidden sm:block">({pad(s.startHour)}-{pad(s.endHour)})</div>
-                        <div className="text-gray-600 sm:hidden">{s.startHour}-{s.endHour}</div>
-                      </div>
+                      />
                     ))}
                   </div>
+                  {/* Room 2 */}
                   {room2.length > 0 && (
-                    <div className="flex-1 space-y-px">
+                    <div className="flex-1 space-y-0.5">
                       {room2.map(s => (
-                        <div
+                        <ShiftBadge
                           key={s.id}
-                          className={`text-[8px] sm:text-[10px] leading-tight px-0.5 sm:px-1 py-0.5 rounded cursor-pointer active:opacity-70 transition-opacity ${
-                            isFiltered(s.doctorId) ? 'opacity-20' : ''
-                          }`}
-                          style={{ backgroundColor: getDoctorColor(s.doctorId) }}
+                          shift={s}
+                          doctorName={getDoctorName(s.doctorId)}
+                          doctorColor={getDoctorColor(s.doctorId)}
+                          filtered={isFiltered(s.doctorId)}
                           onClick={(e) => { e.stopPropagation(); setEditShift(s); }}
-                        >
-                          <div className="font-medium truncate">{getDoctorName(s.doctorId)}</div>
-                          <div className="text-gray-600 hidden sm:block">({pad(s.startHour)}-{pad(s.endHour)})</div>
-                          <div className="text-gray-600 sm:hidden">{s.startHour}-{s.endHour}</div>
-                        </div>
+                        />
                       ))}
                     </div>
                   )}
