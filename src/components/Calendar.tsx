@@ -3,6 +3,7 @@ import type { Shift } from '../types';
 import { useAppStore } from '../store';
 import { isHolidayOrSunday, isSaturday, getHolidayName } from '../utils/holidays';
 import ShiftModal from './ShiftModal';
+import ScheduleImport from './ScheduleImport';
 
 interface Props {
   year: number;
@@ -19,6 +20,7 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editShift, setEditShift] = useState<Shift | null>(null);
   const [filterDoctors, setFilterDoctors] = useState<Set<string>>(new Set());
+  const [showImport, setShowImport] = useState(false);
 
   const monthStr = `${year}-${pad(month)}`;
   const shifts = getShiftsForMonth(monthStr);
@@ -78,11 +80,19 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
 
   return (
     <div className="-mx-4 sm:mx-0">
-      {/* Month navigation */}
-      <div className="flex items-center justify-center gap-6 mb-3 px-4">
-        <button onClick={prevMonth} className="p-3 hover:bg-gray-100 active:bg-gray-200 rounded-lg text-2xl select-none">&lt;</button>
-        <h2 className="text-xl font-bold">{year}년 {month}월</h2>
-        <button onClick={nextMonth} className="p-3 hover:bg-gray-100 active:bg-gray-200 rounded-lg text-2xl select-none">&gt;</button>
+      {/* Month navigation + import button */}
+      <div className="flex items-center justify-between px-4 mb-3">
+        <div className="flex items-center gap-4 sm:gap-6 flex-1 justify-center">
+          <button onClick={prevMonth} className="p-3 hover:bg-gray-100 active:bg-gray-200 rounded-lg text-2xl select-none">&lt;</button>
+          <h2 className="text-xl font-bold">{year}년 {month}월</h2>
+          <button onClick={nextMonth} className="p-3 hover:bg-gray-100 active:bg-gray-200 rounded-lg text-2xl select-none">&gt;</button>
+        </div>
+        <button
+          onClick={() => setShowImport(true)}
+          className="px-3 py-2 bg-green-600 text-white text-xs sm:text-sm font-medium rounded-lg active:bg-green-700 hover:bg-green-700 whitespace-nowrap"
+        >
+          붙여넣기
+        </button>
       </div>
 
       {/* Doctor filter */}
@@ -214,6 +224,14 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
           date={editShift.date}
           editShift={editShift}
           onClose={() => { setEditShift(null); setSelectedDate(null); }}
+        />
+      )}
+
+      {/* Schedule Import Modal */}
+      {showImport && (
+        <ScheduleImport
+          onClose={() => setShowImport(false)}
+          onImported={(y, m) => onMonthChange(y, m)}
         />
       )}
     </div>
