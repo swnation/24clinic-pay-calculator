@@ -73,9 +73,10 @@ export function parseScheduleText(text: string): ParseResult {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // Check if this is a day number (1-31, standalone)
-    if (/^\d{1,2}$/.test(trimmed)) {
-      const num = parseInt(trimmed);
+    // Check if this is a day number (1-31, optionally followed by holiday name like "1 삼일절")
+    const dayMatch = trimmed.match(/^(\d{1,2})(?:\s+\S+.*)?$/);
+    if (dayMatch && !/\(\d{2}-\d{2}\)/.test(trimmed)) {
+      const num = parseInt(dayMatch[1]);
       if (num >= 1 && num <= 31) {
         flushDay();
         currentDay = num;
