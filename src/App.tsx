@@ -9,7 +9,7 @@ import { useAppStore } from './store';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'schedule', label: '스케줄' },
   { key: 'wage', label: '급여계산' },
-  { key: 'export', label: '캘린더 내보내기' },
+  { key: 'export', label: '캘린더' },
   { key: 'settings', label: '설정' },
 ];
 
@@ -28,24 +28,24 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-gray-900 text-white">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-bold">24시 열린의원 급여 계산기</h1>
-          <span className="text-sm text-gray-400">{state.branchName}점</span>
+      <header className="bg-gray-900 text-white safe-top">
+        <div className="max-w-6xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between">
+          <h1 className="text-sm sm:text-lg font-bold">24시 열린의원</h1>
+          <span className="text-xs sm:text-sm text-gray-400">{state.branchName}점</span>
         </div>
       </header>
 
-      {/* Tab navigation */}
+      {/* Tab navigation - fixed at top on mobile */}
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 flex overflow-x-auto">
+        <div className="max-w-6xl mx-auto flex">
           {TABS.map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+              className={`flex-1 sm:flex-none px-3 sm:px-5 py-3 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                 tab === t.key
                   ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  : 'border-transparent text-gray-400 active:text-gray-600'
               }`}
             >
               {t.label}
@@ -55,7 +55,7 @@ function App() {
       </nav>
 
       {/* Content */}
-      <main className="max-w-6xl mx-auto px-4 py-6">
+      <main className="max-w-6xl mx-auto px-4 py-4 sm:py-6 pb-8">
         {tab === 'schedule' && (
           <Calendar year={year} month={month} onMonthChange={handleMonthChange} />
         )}

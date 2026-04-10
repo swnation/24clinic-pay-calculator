@@ -81,22 +81,22 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
   return (
     <div className="max-w-2xl mx-auto">
       {/* Month navigation */}
-      <div className="flex items-center justify-center gap-4 mb-4">
-        <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-lg text-xl">&lt;</button>
+      <div className="flex items-center justify-center gap-6 mb-3">
+        <button onClick={prevMonth} className="p-3 active:bg-gray-200 hover:bg-gray-100 rounded-lg text-2xl select-none">&lt;</button>
         <h2 className="text-xl font-bold">{year}년 {month}월</h2>
-        <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-lg text-xl">&gt;</button>
+        <button onClick={nextMonth} className="p-3 active:bg-gray-200 hover:bg-gray-100 rounded-lg text-2xl select-none">&gt;</button>
       </div>
 
       {/* Doctor selector */}
-      <div className="flex flex-wrap gap-2 mb-6 justify-center">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-5 justify-center">
         {state.doctors.map(d => (
           <button
             key={d.id}
             onClick={() => setSelectedDoctor(d.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+            className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border-2 transition-all ${
               selectedDoctor === d.id
                 ? 'border-gray-700 shadow-md scale-105'
-                : 'border-transparent opacity-60 hover:opacity-80'
+                : 'border-transparent opacity-50'
             }`}
             style={{ backgroundColor: d.color }}
           >
@@ -114,13 +114,13 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
                 {doctor.name} - {year}년 {month}월 급여 내역
               </h3>
             </div>
-            <table className="w-full text-sm">
+            <table className="w-full text-xs sm:text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
-                  <th className="text-left px-4 py-2">구분</th>
-                  <th className="text-right px-4 py-2">시간</th>
-                  <th className="text-right px-4 py-2">시급(만원)</th>
-                  <th className="text-right px-4 py-2">소계(만원)</th>
+                  <th className="text-left px-2 sm:px-4 py-2">구분</th>
+                  <th className="text-right px-2 sm:px-4 py-2">시간</th>
+                  <th className="text-right px-2 sm:px-4 py-2">시급</th>
+                  <th className="text-right px-2 sm:px-4 py-2">소계(만원)</th>
                 </tr>
               </thead>
               <tbody>
@@ -129,10 +129,10 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
                   if (hours === 0) return null;
                   return (
                     <tr key={key} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-2">{RATE_LABELS[key]}</td>
-                      <td className="text-right px-4 py-2">{hours}h</td>
-                      <td className="text-right px-4 py-2">{rates[key]}</td>
-                      <td className="text-right px-4 py-2 font-medium">
+                      <td className="px-2 sm:px-4 py-2">{RATE_LABELS[key]}</td>
+                      <td className="text-right px-2 sm:px-4 py-2">{hours}h</td>
+                      <td className="text-right px-2 sm:px-4 py-2">{rates[key]}</td>
+                      <td className="text-right px-2 sm:px-4 py-2 font-medium">
                         {(breakdown[wageKey as keyof typeof breakdown] as number).toLocaleString()}
                       </td>
                     </tr>
@@ -141,10 +141,10 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
               </tbody>
               <tfoot>
                 <tr className="bg-blue-50 font-bold">
-                  <td className="px-4 py-3">합계</td>
-                  <td className="text-right px-4 py-3">{breakdown.totalHours}h</td>
-                  <td className="text-right px-4 py-3">-</td>
-                  <td className="text-right px-4 py-3 text-blue-700">
+                  <td className="px-2 sm:px-4 py-3">합계</td>
+                  <td className="text-right px-2 sm:px-4 py-3">{breakdown.totalHours}h</td>
+                  <td className="text-right px-2 sm:px-4 py-3">-</td>
+                  <td className="text-right px-2 sm:px-4 py-3 text-blue-700">
                     {breakdown.totalWage.toLocaleString()} 만원
                   </td>
                 </tr>
