@@ -183,7 +183,7 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
                 <div className="flex items-baseline gap-1 mb-1">
                   <span className={`text-xs sm:text-sm font-bold leading-none ${
                     isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'
-                  } ${isToday ? 'bg-blue-600 text-white! rounded-full w-5 h-5 flex items-center justify-center text-[10px]' : ''}`}>
+                  } ${isToday ? 'bg-blue-600 !text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px]' : ''}`}>
                     {day}
                   </span>
                   {holiday && (

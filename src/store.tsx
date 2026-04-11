@@ -20,6 +20,7 @@ interface AppContextType {
   addShift: (shift: Omit<Shift, 'id'>) => void;
   updateShift: (shift: Shift) => void;
   removeShift: (id: string) => void;
+  bulkImport: (shifts: { doctorName: string; date: string; startHour: number; endHour: number; room: 1 | 2 }[], monthsToReplace: string[]) => void;
   setDefaultRates: (rates: RatesBySlot) => void;
   setDoctorMonthlyRate: (doctorId: string, month: string, rates: Partial<RatesBySlot>) => void;
   removeDoctorMonthlyRate: (doctorId: string, month: string) => void;
@@ -133,6 +134,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  const bulkImport = (
+    shifts: { doctorName: string; date: string; startHour: number; endHour: number; room: 1 | 2 }[],
+    monthsToReplace: string[]
+  ) => {
+    setState(s => {
+      // Build name -> doctor map, creating new doctors as needed
+      const nameToId = new Map<string, string>();
+      const usedColors = new Set(s.doctors.map(d => d.color));
+      const newDoctors: Doctor[] = [];
+
+      for (const d of s.doctors) nameToId.set(d.name, d.id);
+
+      for (const sh of shifts) {
+        if (!nameToId.has(sh.doctorName)) {
+          const color = DOCTOR_COLORS.find(c => !usedColors.has(c)) || DOCTOR_COLORS[0];
+          usedColors.add(color);
+          const doc: Doctor = { id: genId(), name: sh.doctorName, color };
+          newDoctors.push(doc);
+          nameToId.set(sh.doctorName, doc.id);
+        }
+      }
+
+      // Remove existing shifts for replaced months
+      const filteredShifts = monthsToReplace.length > 0
+        ? s.shifts.filter(sh => !monthsToReplace.some(mp => sh.date.startsWith(mp)))
+        : s.shifts;
+
+      // Create new shift objects with resolved doctorIds
+      const newShifts: Shift[] = shifts.map(sh => ({
+        id: genId(),
+        doctorId: nameToId.get(sh.doctorName)!,
+        date: sh.date,
+        startHour: sh.startHour,
+        endHour: sh.endHour,
+        room: sh.room,
+      }));
+
+      return {
+        ...s,
+        doctors: [...s.doctors, ...newDoctors],
+        shifts: [...filteredShifts, ...newShifts],
+      };
+    });
+  };
+
   const setDefaultRates = (rates: RatesBySlot) => {
     setState(s => ({ ...s, defaultRates: rates }));
   };
@@ -190,7 +236,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider value={{
       state,
       addDoctor, updateDoctor, removeDoctor,
-      addShift, updateShift, removeShift,
+      addShift, updateShift, removeShift, bulkImport,
       setDefaultRates, setDoctorMonthlyRate, removeDoctorMonthlyRate,
       toggleHoliday, setCustomHolidays,
       setBranchName,

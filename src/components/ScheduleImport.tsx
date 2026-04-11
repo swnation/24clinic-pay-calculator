@@ -22,7 +22,7 @@ interface MonthSummary {
 }
 
 export default function ScheduleImport({ onClose, onImported }: Props) {
-  const { state, addDoctor, addShift, removeShift } = useAppStore();
+  const { state, bulkImport } = useAppStore();
   const [text, setText] = useState('');
   const [parsedList, setParsedList] = useState<ParseResult[] | null>(null);
   const [error, setError] = useState('');
@@ -73,30 +73,22 @@ export default function ScheduleImport({ onClose, onImported }: Props) {
   const handleImport = () => {
     if (!parsedList) return;
 
-    // Create new doctors
-    const doctorMap = new Map<string, string>();
-    for (const d of state.doctors) doctorMap.set(d.name, d.id);
-    for (const name of allNewDoctors) {
-      const created = addDoctor(name);
-      doctorMap.set(name, created.id);
-    }
+    const monthsToReplace = replaceExisting
+      ? parsedList.map(r => `${r.year}-${pad(r.month)}`)
+      : [];
 
-    // Process each month
-    for (const result of parsedList) {
-      if (replaceExisting) {
-        const monthPrefix = `${result.year}-${pad(result.month)}`;
-        const existing = state.shifts.filter(s => s.date.startsWith(monthPrefix));
-        for (const s of existing) removeShift(s.id);
-      }
+    const allShifts = parsedList.flatMap(result =>
+      result.shifts.map(s => ({
+        doctorName: s.doctorName,
+        date: s.date,
+        startHour: s.startHour,
+        endHour: s.endHour,
+        room: s.room,
+      }))
+    );
 
-      for (const s of result.shifts) {
-        const doctorId = doctorMap.get(s.doctorName);
-        if (!doctorId) continue;
-        addShift({ doctorId, date: s.date, startHour: s.startHour, endHour: s.endHour, room: s.room });
-      }
-    }
+    bulkImport(allShifts, monthsToReplace);
 
-    // Navigate to the last imported month
     const last = parsedList[parsedList.length - 1];
     onImported(last.year, last.month);
     onClose();
