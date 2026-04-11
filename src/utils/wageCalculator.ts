@@ -1,23 +1,17 @@
-import type { Shift, RatesBySlot, WageBreakdown, WageBreakdownRow, WeeklyHours, DoctorMonthlyRate, BranchMonthlyRate, DayType, TimeSlot, SpecialRatePeriod } from '../types';
+import type { Shift, RatesBySlot, WageBreakdown, WageBreakdownRow, WeeklyHours, BranchMonthlyRate, DayType, TimeSlot, SpecialRatePeriod } from '../types';
 import { rateKey } from '../types';
 import { isSaturday, isHolidayOrSunday, isSunday } from './holidays';
 
-// Priority: doctor override > branch monthly > default
+// Priority: branch monthly > default
 export function getEffectiveRates(
-  doctorId: string,
   month: string,
   defaultRates: RatesBySlot,
-  branchMonthlyRates: BranchMonthlyRate[],
-  doctorMonthlyRates: DoctorMonthlyRate[]
+  branchMonthlyRates: BranchMonthlyRate[]
 ): RatesBySlot {
   const branchRate = branchMonthlyRates.find(r => r.month === month);
-  const doctorRate = doctorMonthlyRates.find(
-    r => r.doctorId === doctorId && r.month === month
-  );
   return {
     ...defaultRates,
     ...branchRate?.rates,
-    ...doctorRate?.rates,
   };
 }
 
