@@ -7,6 +7,64 @@ interface CalendarEvent {
   endHour: number;
 }
 
+interface MergedBlock {
+  room: 1 | 2;
+  startHour: number;
+  endHour: number;
+}
+
+function pad(n: number): string {
+  return n.toString().padStart(2, '0');
+}
+
+// Check if two shifts are consecutive (allowing break gaps 13→14, 18→19)
+function isConsecutive(endHour: number, startHour: number): boolean {
+  return startHour === endHour || startHour === endHour + 1;
+}
+
+// Merge consecutive same-room shifts into blocks
+function mergeShiftsIntoBlocks(shifts: Shift[]): MergedBlock[] {
+  if (shifts.length === 0) return [];
+
+  // Group by room
+  const byRoom = new Map<number, Shift[]>();
+  for (const s of shifts) {
+    if (!byRoom.has(s.room)) byRoom.set(s.room, []);
+    byRoom.get(s.room)!.push(s);
+  }
+
+  const blocks: MergedBlock[] = [];
+
+  for (const [room, roomShifts] of byRoom) {
+    const sorted = [...roomShifts].sort((a, b) => a.startHour - b.startHour);
+
+    let current: MergedBlock = {
+      room: room as 1 | 2,
+      startHour: sorted[0].startHour,
+      endHour: sorted[0].endHour,
+    };
+
+    for (let i = 1; i < sorted.length; i++) {
+      if (isConsecutive(current.endHour, sorted[i].startHour)) {
+        // Merge: extend the end hour
+        current.endHour = sorted[i].endHour;
+      } else {
+        blocks.push(current);
+        current = {
+          room: room as 1 | 2,
+          startHour: sorted[i].startHour,
+          endHour: sorted[i].endHour,
+        };
+      }
+    }
+    blocks.push(current);
+  }
+
+  // Sort blocks by start hour
+  blocks.sort((a, b) => a.startHour - b.startHour);
+  return blocks;
+}
+
 export function generateCalendarEvents(
   shifts: Shift[],
   _doctor: Doctor,
@@ -23,51 +81,24 @@ export function generateCalendarEvents(
   const events: CalendarEvent[] = [];
 
   for (const [date, dayShifts] of byDate) {
-    // Sort by start hour
-    const sorted = [...dayShifts].sort((a, b) => a.startHour - b.startHour);
+    const blocks = mergeShiftsIntoBlocks(dayShifts);
 
-    // Check if it's a full shift (covers 09-24 in one room)
-    const isFullShift = sorted.length === 1
-      && sorted[0].startHour === 9
-      && sorted[0].endHour === 24;
-
-    const isFullShiftMulti = sorted.length >= 2
-      && sorted[0].startHour === 9
-      && sorted[sorted.length - 1].endHour === 24
-      && isContiguousWithBreaks(sorted);
+    // Check full shift: single block covering 09-24
+    const isFullShift = blocks.length === 1
+      && blocks[0].startHour === 9
+      && blocks[0].endHour === 24;
 
     if (isFullShift) {
-      events.push({
-        title: branchName,
-        date,
-        startHour: 9,
-        endHour: 24,
-      });
-    } else if (isFullShiftMulti) {
-      // Full shift across rooms
-      const parts = sorted.map(s => `${branchName}${s.room}(${pad(s.startHour)}-${pad(s.endHour)})`);
-      events.push({
-        title: parts.join(', '),
-        date,
-        startHour: sorted[0].startHour,
-        endHour: sorted[sorted.length - 1].endHour,
-      });
-    } else if (sorted.length === 1) {
-      const s = sorted[0];
-      events.push({
-        title: `${branchName}${s.room}(${pad(s.startHour)}-${pad(s.endHour)})`,
-        date,
-        startHour: s.startHour,
-        endHour: s.endHour,
-      });
+      events.push({ title: branchName, date, startHour: 9, endHour: 24 });
     } else {
-      // Multiple shifts, combine into one event
-      const parts = sorted.map(s => `${branchName}${s.room}(${pad(s.startHour)}-${pad(s.endHour)})`);
+      const parts = blocks.map(b =>
+        `${branchName}${b.room}(${pad(b.startHour)}-${pad(b.endHour)})`
+      );
       events.push({
         title: parts.join(', '),
         date,
-        startHour: sorted[0].startHour,
-        endHour: sorted[sorted.length - 1].endHour,
+        startHour: blocks[0].startHour,
+        endHour: blocks[blocks.length - 1].endHour,
       });
     }
   }
@@ -75,24 +106,9 @@ export function generateCalendarEvents(
   return events.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function isContiguousWithBreaks(shifts: Shift[]): boolean {
-  for (let i = 1; i < shifts.length; i++) {
-    const prevEnd = shifts[i - 1].endHour;
-    const curStart = shifts[i].startHour;
-    // Allow gap of break hours (13-14 or 18-19)
-    if (curStart !== prevEnd && curStart !== prevEnd + 1) return false;
-  }
-  return true;
-}
-
-function pad(n: number): string {
-  return n.toString().padStart(2, '0');
-}
-
 function formatDateTimeICS(dateStr: string, hour: number): string {
   const [y, m, d] = dateStr.split('-');
   if (hour === 24) {
-    // Next day 00:00
     const nextDay = new Date(parseInt(y), parseInt(m) - 1, parseInt(d) + 1);
     const ny = nextDay.getFullYear();
     const nm = String(nextDay.getMonth() + 1).padStart(2, '0');
