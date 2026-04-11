@@ -25,18 +25,8 @@ function shiftsOverlap(
   return a.start < b.end && a.end > b.start;
 }
 
-export function parseScheduleText(text: string): ParseResult {
-  // Extract year-month from "2026.04" pattern
-  const monthMatch = text.match(/(\d{4})\.(\d{2})/);
-  if (!monthMatch) throw new Error('월 정보를 찾을 수 없습니다 (예: 2026.04)');
-
-  const year = parseInt(monthMatch[1]);
-  const month = parseInt(monthMatch[2]);
-
-  // Extract branch name (지점명 뒤의 텍스트)
-  const branchMatch = text.match(/지점명\s*\n?\s*(.+?)점/);
-  const branchName = branchMatch ? branchMatch[1].trim() : '';
-
+function parseSingleMonth(text: string, yearMonth: { year: number; month: number }, branchName: string): ParseResult {
+  const { year, month } = yearMonth;
   const lines = text.split('\n');
   const allShifts: ParsedShift[] = [];
   const doctorNamesSet = new Set<string>();
@@ -73,7 +63,7 @@ export function parseScheduleText(text: string): ParseResult {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // Check if this is a day number (1-31, optionally followed by holiday name like "1 삼일절")
+    // Check if this is a day number (1-31, optionally followed by holiday name)
     const dayMatch = trimmed.match(/^(\d{1,2})(?:\s+\S+.*)?$/);
     if (dayMatch && !/\(\d{2}-\d{2}\)/.test(trimmed)) {
       const num = parseInt(dayMatch[1]);
@@ -96,7 +86,6 @@ export function parseScheduleText(text: string): ParseResult {
     }
   }
 
-  // Flush last day
   flushDay();
 
   return {
@@ -106,4 +95,67 @@ export function parseScheduleText(text: string): ParseResult {
     shifts: allShifts,
     doctorNames: [...doctorNamesSet],
   };
+}
+
+/** Parse a single month's schedule text */
+export function parseScheduleText(text: string): ParseResult {
+  const monthMatch = text.match(/(\d{4})\.(\d{2})/);
+  if (!monthMatch) throw new Error('월 정보를 찾을 수 없습니다 (예: 2026.04)');
+
+  const year = parseInt(monthMatch[1]);
+  const month = parseInt(monthMatch[2]);
+
+  const branchMatch = text.match(/지점명\s*\n?\s*(.+?)점/);
+  const branchName = branchMatch ? branchMatch[1].trim() : '';
+
+  return parseSingleMonth(text, { year, month }, branchName);
+}
+
+/** Parse multiple months from a single pasted text block */
+export function parseMultiMonthText(text: string): ParseResult[] {
+  // Split by year-month pattern "YYYY.MM" which appears as month header
+  // Each month section starts with the pattern like " 2026.04 " or "2026.04"
+  const monthPattern = /(\d{4})\.(\d{2})/g;
+  const matches: { index: number; year: number; month: number }[] = [];
+
+  let m;
+  while ((m = monthPattern.exec(text)) !== null) {
+    matches.push({
+      index: m.index,
+      year: parseInt(m[1]),
+      month: parseInt(m[2]),
+    });
+  }
+
+  if (matches.length === 0) {
+    throw new Error('월 정보를 찾을 수 없습니다 (예: 2026.04)');
+  }
+
+  // Extract branch name from the first occurrence
+  const branchMatch = text.match(/지점명\s*\n?\s*(.+?)점/);
+  const branchName = branchMatch ? branchMatch[1].trim() : '';
+
+  // If only one month found, use single parse
+  if (matches.length === 1) {
+    return [parseSingleMonth(text, matches[0], branchName)];
+  }
+
+  // Split text into month sections
+  const results: ParseResult[] = [];
+
+  for (let i = 0; i < matches.length; i++) {
+    const start = matches[i].index;
+    const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+    const section = text.substring(start, end);
+
+    const result = parseSingleMonth(section, matches[i], branchName);
+    if (result.shifts.length > 0) {
+      results.push(result);
+    }
+  }
+
+  // Sort by year-month
+  results.sort((a, b) => a.year * 100 + a.month - (b.year * 100 + b.month));
+
+  return results;
 }
