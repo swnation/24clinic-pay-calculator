@@ -25,8 +25,8 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
   const monthStr = `${year}-${pad(month)}`;
 
   const rates = useMemo(() =>
-    getEffectiveRates(selectedDoctor, monthStr, state.defaultRates, state.doctorMonthlyRates),
-    [selectedDoctor, monthStr, state.defaultRates, state.doctorMonthlyRates]
+    getEffectiveRates(selectedDoctor, monthStr, state.defaultRates, state.branchMonthlyRates, state.doctorMonthlyRates),
+    [selectedDoctor, monthStr, state.defaultRates, state.branchMonthlyRates, state.doctorMonthlyRates]
   );
 
   const doctorShifts = useMemo(() =>
