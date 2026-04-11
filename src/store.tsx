@@ -87,12 +87,13 @@ function loadState(): AppState {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Merge defaultRates with stored rates to handle migration from old 5-key to new 12-key structure
-      const mergedRates = { ...DEFAULT_RATES, ...(parsed.defaultRates || {}) };
-      // Remove old keys that no longer exist
-      const validKeys = Object.keys(DEFAULT_RATES);
-      for (const key of Object.keys(mergedRates)) {
-        if (!validKeys.includes(key)) delete mergedRates[key as keyof typeof mergedRates];
+      // Pick only valid keys from stored rates with type checking
+      const mergedRates = { ...DEFAULT_RATES };
+      if (parsed?.defaultRates && typeof parsed.defaultRates === 'object') {
+        for (const key of Object.keys(DEFAULT_RATES) as Array<keyof typeof DEFAULT_RATES>) {
+          const storedValue = parsed.defaultRates[key];
+          if (typeof storedValue === 'number') mergedRates[key] = storedValue;
+        }
       }
       return {
         ...defaultState,
