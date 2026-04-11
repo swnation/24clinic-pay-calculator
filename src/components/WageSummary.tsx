@@ -151,9 +151,10 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
             const branchOverride = state.branchMonthlyRates.find(r => r.month === monthStr);
             const handleRateChange = (key: keyof RatesBySlot, value: string) => {
               const num = value === '' ? undefined : Number(value);
-              const current = branchOverride?.rates || {};
-              const newRates: Partial<RatesBySlot> = { ...current };
-              if (num !== undefined && !isNaN(num)) {
+              if (num !== undefined && (isNaN(num) || num < 0)) return;
+
+              const newRates: Partial<RatesBySlot> = { ...(branchOverride?.rates || {}) };
+              if (num !== undefined) {
                 newRates[key] = num;
               } else {
                 delete newRates[key];
