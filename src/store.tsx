@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import type { Doctor, Shift, RatesBySlot, DoctorMonthlyRate, SpecialRatePeriod } from './types';
+import type { Doctor, Shift, RatesBySlot, DoctorMonthlyRate, BranchMonthlyRate, SpecialRatePeriod } from './types';
 import { DEFAULT_RATES, DOCTOR_COLORS } from './types';
 import { getKoreanHolidaysForYear } from './utils/holidays';
 
@@ -8,6 +8,7 @@ interface AppState {
   shifts: Shift[];
   defaultRates: RatesBySlot;
   doctorMonthlyRates: DoctorMonthlyRate[];
+  branchMonthlyRates: BranchMonthlyRate[];
   specialRatePeriods: SpecialRatePeriod[];
   customHolidays: string[];
   branchName: string;
@@ -25,6 +26,8 @@ interface AppContextType {
   setDefaultRates: (rates: RatesBySlot) => void;
   setDoctorMonthlyRate: (doctorId: string, month: string, rates: Partial<RatesBySlot>) => void;
   removeDoctorMonthlyRate: (doctorId: string, month: string) => void;
+  setBranchMonthlyRate: (month: string, rates: Partial<RatesBySlot>) => void;
+  removeBranchMonthlyRate: (month: string) => void;
   addSpecialRatePeriod: (period: Omit<SpecialRatePeriod, 'id'>) => void;
   removeSpecialRatePeriod: (id: string) => void;
   toggleHoliday: (date: string) => void;
@@ -54,11 +57,26 @@ const defaultHolidays = [
   ...getKoreanHolidaysForYear(currentYear + 1),
 ];
 
+// 잠실점 월별 시급 프리셋 (기본급 4,6과 다른 항목만)
+const presetBranchMonthlyRates: BranchMonthlyRate[] = [
+  { month: '2024-09', rates: { saturdayEvening: 7 } },
+  { month: '2025-01', rates: { weekdayEvening: 7, saturdayAfternoon: 7, sundayMorning: 7, sundayAfternoon: 7, sundayEvening: 7, holidayMorning: 7, holidayAfternoon: 7, holidayEvening: 7 } },
+  { month: '2025-09', rates: { saturdayAfternoon: 7 } },
+  { month: '2025-10', rates: { saturdayAfternoon: 7 } },
+  { month: '2025-11', rates: { saturdayEvening: 7 } },
+  { month: '2025-12', rates: { weekdayEvening: 7, saturdayAfternoon: 7 } },
+  { month: '2026-01', rates: { saturdayEvening: 7 } },
+  { month: '2026-02', rates: { saturdayEvening: 7 } },
+  { month: '2026-03', rates: { weekdayEvening: 7, saturdayAfternoon: 7, saturdayEvening: 7, sundayMorning: 7, sundayAfternoon: 7, sundayEvening: 7, holidayMorning: 7, holidayAfternoon: 7, holidayEvening: 7 } },
+  { month: '2026-04', rates: { weekdayEvening: 7, saturdayAfternoon: 7, saturdayEvening: 7, sundayMorning: 8, sundayAfternoon: 8, sundayEvening: 8, holidayMorning: 8, holidayAfternoon: 8, holidayEvening: 8 } },
+];
+
 const defaultState: AppState = {
   doctors: defaultDoctors,
   shifts: [],
   defaultRates: { ...DEFAULT_RATES },
   doctorMonthlyRates: [],
+  branchMonthlyRates: presetBranchMonthlyRates,
   specialRatePeriods: [],
   customHolidays: defaultHolidays,
   branchName: '잠실',
@@ -211,6 +229,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  const setBranchMonthlyRate = (month: string, rates: Partial<RatesBySlot>) => {
+    setState(s => {
+      const existing = s.branchMonthlyRates.findIndex(r => r.month === month);
+      const newRates = [...s.branchMonthlyRates];
+      if (existing >= 0) {
+        newRates[existing] = { month, rates };
+      } else {
+        newRates.push({ month, rates });
+      }
+      return { ...s, branchMonthlyRates: newRates };
+    });
+  };
+
+  const removeBranchMonthlyRate = (month: string) => {
+    setState(s => ({
+      ...s,
+      branchMonthlyRates: s.branchMonthlyRates.filter(r => r.month !== month),
+    }));
+  };
+
   const addSpecialRatePeriod = (period: Omit<SpecialRatePeriod, 'id'>) => {
     setState(s => ({
       ...s,
@@ -256,6 +294,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addDoctor, updateDoctor, removeDoctor,
       addShift, updateShift, removeShift, bulkImport,
       setDefaultRates, setDoctorMonthlyRate, removeDoctorMonthlyRate,
+      setBranchMonthlyRate, removeBranchMonthlyRate,
       addSpecialRatePeriod, removeSpecialRatePeriod,
       toggleHoliday, setCustomHolidays,
       setBranchName,

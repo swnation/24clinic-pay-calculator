@@ -35,6 +35,12 @@ export interface DoctorMonthlyRate {
   rates: Partial<RatesBySlot>;
 }
 
+// 지점 월별 시급 (모든 의사에게 적용, 의사별 오버라이드보다 낮은 우선순위)
+export interface BranchMonthlyRate {
+  month: string; // YYYY-MM
+  rates: Partial<RatesBySlot>;
+}
+
 // 설/추석 등 연휴 기간 특별 시급
 export interface SpecialRatePeriod {
   id: string;
