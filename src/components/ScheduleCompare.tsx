@@ -132,8 +132,21 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
 
   return (
     <div>
+      {/* Month navigation - always visible */}
+      <div className="flex items-center justify-center gap-6 mb-3">
+        <button
+          onClick={() => { if (month === 1) onMonthChange(year - 1, 12); else onMonthChange(year, month - 1); }}
+          className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none"
+        >&lt;</button>
+        <h2 className="text-lg font-bold">{year}.{pad(month)}</h2>
+        <button
+          onClick={() => { if (month === 12) onMonthChange(year + 1, 1); else onMonthChange(year, month + 1); }}
+          className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none"
+        >&gt;</button>
+      </div>
+
       {!image ? (
-        <div className="flex flex-col items-center gap-4 py-12">
+        <div className="flex flex-col items-center gap-4 py-8">
           <p className="text-sm text-gray-600 text-center px-4">
             24clinic.kr 스케줄 페이지를 캡처해서 업로드하면<br />
             파싱된 데이터와 전환하면서 비교할 수 있습니다.
@@ -148,19 +161,6 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
         </div>
       ) : (
         <div>
-          {/* Month navigation */}
-          <div className="flex items-center justify-center gap-6 mb-3">
-            <button
-              onClick={() => { if (month === 1) onMonthChange(year - 1, 12); else onMonthChange(year, month - 1); }}
-              className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none"
-            >&lt;</button>
-            <h2 className="text-lg font-bold">{year}.{pad(month)}</h2>
-            <button
-              onClick={() => { if (month === 12) onMonthChange(year + 1, 1); else onMonthChange(year, month + 1); }}
-              className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none"
-            >&gt;</button>
-          </div>
-
           {/* Toggle: 원본 / 파싱결과 */}
           <div className="flex items-center gap-1 mb-3 bg-gray-100 rounded-lg p-1 max-w-xs mx-auto">
             <button
