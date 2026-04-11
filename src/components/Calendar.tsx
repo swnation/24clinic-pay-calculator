@@ -144,7 +144,7 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
 
       {/* Calendar grid */}
       <div className="overflow-x-auto bg-white">
-        <div className="grid grid-cols-7 border-t border-l border-gray-400 min-w-[350px]">
+        <div className="grid grid-cols-7 border-t border-l border-gray-400 min-w-[700px]">
           {/* Day names - match original: dark bg, white text */}
           {dayNames.map((name, i) => (
             <div
