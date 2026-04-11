@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import type { RatesBySlot } from '../types';
-import { RATE_LABELS } from '../types';
+import type { RatesBySlot, DayType, TimeSlot } from '../types';
+import { DAY_TYPE_LABELS, TIME_SLOT_LABELS, rateKey } from '../types';
 import { useAppStore } from '../store';
 import { getEffectiveRates, calculateMonthlyWage, calculateWeeklyHours } from '../utils/wageCalculator';
 
@@ -13,6 +13,9 @@ interface Props {
 function pad(n: number): string {
   return n.toString().padStart(2, '0');
 }
+
+const DAY_TYPES: DayType[] = ['weekday', 'saturday', 'sunday', 'holiday'];
+const TIME_SLOTS: TimeSlot[] = ['morning', 'afternoon', 'evening'];
 
 export default function WageSummary({ year, month, onMonthChange }: Props) {
   const { state, getShiftsForDoctor, setDoctorMonthlyRate } = useAppStore();
@@ -32,8 +35,8 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
   );
 
   const breakdown = useMemo(() =>
-    calculateMonthlyWage(doctorShifts, rates, state.customHolidays),
-    [doctorShifts, rates, state.customHolidays]
+    calculateMonthlyWage(doctorShifts, rates, state.customHolidays, state.specialRatePeriods),
+    [doctorShifts, rates, state.customHolidays, state.specialRatePeriods]
   );
 
   const weekly = useMemo(() =>
@@ -51,7 +54,6 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
     const num = value === '' ? undefined : Number(value);
     const currentOverride = override?.rates || {};
     const newRates = { ...currentOverride, [key]: num };
-    // Remove undefined entries
     const cleaned: Partial<RatesBySlot> = {};
     for (const [k, v] of Object.entries(newRates)) {
       if (v !== undefined && v !== null && !isNaN(v as number)) {
@@ -69,14 +71,6 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
     if (month === 12) onMonthChange(year + 1, 1);
     else onMonthChange(year, month + 1);
   };
-
-  const slotRows: { key: keyof RatesBySlot; hoursKey: string; wageKey: string }[] = [
-    { key: 'weekdayDaytime', hoursKey: 'weekdayDaytimeHours', wageKey: 'weekdayDaytimeWage' },
-    { key: 'weekdayEvening', hoursKey: 'weekdayEveningHours', wageKey: 'weekdayEveningWage' },
-    { key: 'saturdayDaytime', hoursKey: 'saturdayDaytimeHours', wageKey: 'saturdayDaytimeWage' },
-    { key: 'saturdayEvening', hoursKey: 'saturdayEveningHours', wageKey: 'saturdayEveningWage' },
-    { key: 'sundayHoliday', hoursKey: 'sundayHolidayHours', wageKey: 'sundayHolidayWage' },
-  ];
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -124,20 +118,18 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {slotRows.map(({ key, hoursKey, wageKey }) => {
-                  const hours = breakdown[hoursKey as keyof typeof breakdown] as number;
-                  if (hours === 0) return null;
-                  return (
-                    <tr key={key} className="border-b hover:bg-gray-50">
-                      <td className="px-2 sm:px-4 py-2">{RATE_LABELS[key]}</td>
-                      <td className="text-right px-2 sm:px-4 py-2">{hours}h</td>
-                      <td className="text-right px-2 sm:px-4 py-2">{rates[key]}</td>
-                      <td className="text-right px-2 sm:px-4 py-2 font-medium">
-                        {(breakdown[wageKey as keyof typeof breakdown] as number).toLocaleString()}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {breakdown.rows.map((row, i) => (
+                  <tr key={i} className="border-b hover:bg-gray-50">
+                    <td className="px-2 sm:px-4 py-2">
+                      {DAY_TYPE_LABELS[row.dayType]} {TIME_SLOT_LABELS[row.timeSlot]}
+                    </td>
+                    <td className="text-right px-2 sm:px-4 py-2">{row.hours}h</td>
+                    <td className="text-right px-2 sm:px-4 py-2">{row.rate}</td>
+                    <td className="text-right px-2 sm:px-4 py-2 font-medium">
+                      {row.wage.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
               <tfoot>
                 <tr className="bg-blue-50 font-bold">
@@ -168,36 +160,58 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
             </div>
           </div>
 
-          {/* Rate override editor */}
+          {/* Rate override editor - 4x3 grid */}
           <div className="bg-white rounded-lg border border-gray-200 mb-6">
             <button
               className="w-full px-4 py-3 text-left text-sm font-medium flex justify-between items-center hover:bg-gray-50"
               onClick={() => setShowRateEditor(!showRateEditor)}
             >
-              <span>{doctor.name} 시급 설정 (이번 달)</span>
+              <span>{doctor.name} 시급 설정 ({year}.{pad(month)})</span>
               <span className="text-gray-400">{showRateEditor ? '▲' : '▼'}</span>
             </button>
             {showRateEditor && (
-              <div className="px-4 pb-4 border-t">
+              <div className="px-3 sm:px-4 pb-4 border-t">
                 <p className="text-xs text-gray-500 mt-3 mb-3">
                   비워두면 기본급이 적용됩니다. (단위: 만원/시간)
                 </p>
-                <div className="space-y-2">
-                  {(Object.keys(RATE_LABELS) as (keyof RatesBySlot)[]).map(key => (
-                    <div key={key} className="flex items-center gap-3">
-                      <label className="text-sm text-gray-700 w-40">{RATE_LABELS[key]}</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        placeholder={`${state.defaultRates[key]} (기본)`}
-                        value={override?.rates[key] ?? ''}
-                        onChange={e => handleRateChange(key, e.target.value)}
-                        className="w-24 border rounded px-2 py-1 text-sm text-right"
-                      />
-                      <span className="text-xs text-gray-400">만원/h</span>
-                    </div>
-                  ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs sm:text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 pr-2"></th>
+                        {TIME_SLOTS.map(ts => (
+                          <th key={ts} className="text-center py-2 px-1 text-gray-500 font-medium">
+                            {ts === 'morning' ? '오전' : ts === 'afternoon' ? '오후' : '저녁'}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {DAY_TYPES.map(dt => (
+                        <tr key={dt} className="border-b last:border-b-0">
+                          <td className="py-2 pr-2 font-medium text-gray-700 whitespace-nowrap">
+                            {DAY_TYPE_LABELS[dt]}
+                          </td>
+                          {TIME_SLOTS.map(ts => {
+                            const key = rateKey(dt, ts);
+                            return (
+                              <td key={ts} className="py-1.5 px-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.5"
+                                  placeholder={`${state.defaultRates[key]}`}
+                                  value={override?.rates[key] ?? ''}
+                                  onChange={e => handleRateChange(key, e.target.value)}
+                                  className="w-full border rounded px-2 py-1.5 text-sm text-center min-w-[50px]"
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}

@@ -1,13 +1,75 @@
 import { useState } from 'react';
-import type { RatesBySlot } from '../types';
-import { RATE_LABELS, DOCTOR_COLORS } from '../types';
+import type { RatesBySlot, DayType, TimeSlot, SpecialRatePeriod } from '../types';
+import { DAY_TYPE_LABELS, rateKey, DOCTOR_COLORS } from '../types';
 import { useAppStore } from '../store';
 import { isKoreanHoliday, getHolidayName } from '../utils/holidays';
+
+const DAY_TYPES: DayType[] = ['weekday', 'saturday', 'sunday', 'holiday'];
+const TIME_SLOTS: TimeSlot[] = ['morning', 'afternoon', 'evening'];
+
+function SpecialPeriodForm({ onAdd }: { onAdd: (p: Omit<SpecialRatePeriod, 'id'>) => void }) {
+  const [name, setName] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [morning, setMorning] = useState('');
+  const [afternoon, setAfternoon] = useState('');
+  const [evening, setEvening] = useState('');
+
+  const handleAdd = () => {
+    if (!name || !startDate || !endDate || !morning || !afternoon || !evening) return;
+    onAdd({
+      name, startDate, endDate,
+      morning: Number(morning),
+      afternoon: Number(afternoon),
+      evening: Number(evening),
+    });
+    setName(''); setStartDate(''); setEndDate('');
+    setMorning(''); setAfternoon(''); setEvening('');
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input type="text" placeholder="이름 (예: 설 연휴)" value={name} onChange={e => setName(e.target.value)}
+          className="flex-1 border rounded px-2 py-1.5 text-sm" />
+      </div>
+      <div className="flex gap-2">
+        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+          className="flex-1 border rounded px-2 py-1.5 text-sm" />
+        <span className="self-center text-gray-400 text-sm">~</span>
+        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+          className="flex-1 border rounded px-2 py-1.5 text-sm" />
+      </div>
+      <div className="flex gap-2 items-center">
+        <div className="flex-1">
+          <label className="text-[10px] text-gray-400">오전</label>
+          <input type="number" min="0" step="0.5" placeholder="만원" value={morning} onChange={e => setMorning(e.target.value)}
+            className="w-full border rounded px-2 py-1.5 text-sm text-center" />
+        </div>
+        <div className="flex-1">
+          <label className="text-[10px] text-gray-400">오후</label>
+          <input type="number" min="0" step="0.5" placeholder="만원" value={afternoon} onChange={e => setAfternoon(e.target.value)}
+            className="w-full border rounded px-2 py-1.5 text-sm text-center" />
+        </div>
+        <div className="flex-1">
+          <label className="text-[10px] text-gray-400">저녁</label>
+          <input type="number" min="0" step="0.5" placeholder="만원" value={evening} onChange={e => setEvening(e.target.value)}
+            className="w-full border rounded px-2 py-1.5 text-sm text-center" />
+        </div>
+      </div>
+      <button onClick={handleAdd}
+        className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
+        추가
+      </button>
+    </div>
+  );
+}
 
 export default function Settings() {
   const {
     state, addDoctor, updateDoctor, removeDoctor,
-    setDefaultRates, toggleHoliday, setBranchName,
+    setDefaultRates, addSpecialRatePeriod, removeSpecialRatePeriod,
+    toggleHoliday, setBranchName,
   } = useAppStore();
 
   const [newDoctorName, setNewDoctorName] = useState('');
@@ -153,28 +215,83 @@ export default function Settings() {
         </div>
       </section>
 
-      {/* Default rates */}
+      {/* Default rates - 4x3 grid */}
       <section className="bg-white rounded-lg border border-gray-200 p-6">
         <h3 className="font-bold text-lg mb-4">기본 시급 설정</h3>
         <p className="text-sm text-gray-500 mb-4">
           의사별 월간 시급이 설정되지 않은 경우 이 기본급이 적용됩니다. (단위: 만원/시간)
         </p>
-        <div className="space-y-3">
-          {(Object.keys(RATE_LABELS) as (keyof RatesBySlot)[]).map(key => (
-            <div key={key} className="flex items-center gap-3">
-              <label className="text-sm text-gray-700 w-44">{RATE_LABELS[key]}</label>
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={state.defaultRates[key]}
-                onChange={e => handleRateChange(key, e.target.value)}
-                className="w-24 border rounded px-2 py-1 text-sm text-right"
-              />
-              <span className="text-xs text-gray-400">만원/h</span>
-            </div>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 pr-2"></th>
+                {TIME_SLOTS.map(ts => (
+                  <th key={ts} className="text-center py-2 px-2 text-gray-500 font-medium">
+                    {ts === 'morning' ? '오전' : ts === 'afternoon' ? '오후' : '저녁'}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {DAY_TYPES.map(dt => (
+                <tr key={dt} className="border-b last:border-b-0">
+                  <td className="py-2 pr-2 font-medium text-gray-700 whitespace-nowrap">
+                    {DAY_TYPE_LABELS[dt]}
+                  </td>
+                  {TIME_SLOTS.map(ts => {
+                    const key = rateKey(dt, ts);
+                    return (
+                      <td key={ts} className="py-1.5 px-1">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={state.defaultRates[key]}
+                          onChange={e => handleRateChange(key, e.target.value)}
+                          className="w-full border rounded px-2 py-1.5 text-sm text-center min-w-[60px]"
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      </section>
+
+      {/* Special rate periods (설/추석 연휴 등) */}
+      <section className="bg-white rounded-lg border border-gray-200 p-6">
+        <h3 className="font-bold text-lg mb-4">특별 시급 기간</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          설/추석 연휴 등 기본 시급과 다른 시급이 적용되는 기간을 설정합니다.
+          이 기간에는 요일과 관계없이 여기에 설정된 시급이 우선 적용됩니다.
+        </p>
+
+        {state.specialRatePeriods.length > 0 && (
+          <div className="space-y-2 mb-4">
+            {state.specialRatePeriods.map(p => (
+              <div key={p.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <div>
+                  <span className="text-sm font-medium">{p.name}</span>
+                  <span className="text-xs text-gray-500 ml-2">{p.startDate} ~ {p.endDate}</span>
+                  <div className="text-xs text-gray-400">
+                    오전 {p.morning} / 오후 {p.afternoon} / 저녁 {p.evening} 만원
+                  </div>
+                </div>
+                <button
+                  onClick={() => removeSpecialRatePeriod(p.id)}
+                  className="text-xs text-red-500 hover:underline ml-2"
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <SpecialPeriodForm onAdd={addSpecialRatePeriod} />
       </section>
 
       {/* Holiday management */}
