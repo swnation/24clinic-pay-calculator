@@ -55,6 +55,7 @@ export interface WageBreakdownRow {
   hours: number;
   rate: number;
   wage: number;
+  specialPeriodName?: string; // 특별 시급 기간 이름 (예: "설 연휴")
 }
 
 export interface WageBreakdown {

@@ -16,7 +16,7 @@ function SpecialPeriodForm({ onAdd }: { onAdd: (p: Omit<SpecialRatePeriod, 'id'>
   const [evening, setEvening] = useState('');
 
   const handleAdd = () => {
-    if (!name || !startDate || !endDate || !morning || !afternoon || !evening) return;
+    if (!name || !startDate || !endDate || !morning || !afternoon || !evening || startDate > endDate) return;
     onAdd({
       name, startDate, endDate,
       morning: Number(morning),

@@ -36,16 +36,24 @@ function getDayType(dateStr: string, customHolidays: string[]): DayType {
   return 'weekday';
 }
 
-function getSpecialPeriodRate(
+interface SpecialMatch {
+  period: SpecialRatePeriod;
+  rate: number;
+}
+
+function findSpecialPeriod(
   dateStr: string,
   timeSlot: TimeSlot,
   specialPeriods: SpecialRatePeriod[]
-): number | null {
-  for (const period of specialPeriods) {
+): SpecialMatch | null {
+  // Later-added (higher index) periods take priority over earlier ones
+  for (let i = specialPeriods.length - 1; i >= 0; i--) {
+    const period = specialPeriods[i];
     if (dateStr >= period.startDate && dateStr <= period.endDate) {
-      if (timeSlot === 'morning') return period.morning;
-      if (timeSlot === 'afternoon') return period.afternoon;
-      return period.evening;
+      const rate = timeSlot === 'morning' ? period.morning
+        : timeSlot === 'afternoon' ? period.afternoon
+        : period.evening;
+      return { period, rate };
     }
   }
   return null;
@@ -65,8 +73,7 @@ export function calculateMonthlyWage(
   customHolidays: string[],
   specialPeriods: SpecialRatePeriod[]
 ): WageBreakdown {
-  // Accumulate hours per (dayType, timeSlot) combination
-  const buckets = new Map<string, { dayType: DayType; timeSlot: TimeSlot; hours: number; wage: number }>();
+  const buckets = new Map<string, { dayType: DayType; timeSlot: TimeSlot; hours: number; wage: number; specialPeriodName?: string }>();
   const workDates = new Set<string>();
 
   for (const shift of shifts) {
@@ -77,21 +84,22 @@ export function calculateMonthlyWage(
       if (isBreakHour(h)) continue;
 
       const timeSlot = getTimeSlot(h);
+      const special = findSpecialPeriod(shift.date, timeSlot, specialPeriods);
+      const rate = special ? special.rate : rates[rateKey(dayType, timeSlot)];
 
-      // Check special period first, then regular rate
-      const specialRate = getSpecialPeriodRate(shift.date, timeSlot, specialPeriods);
-      const rate = specialRate ?? rates[rateKey(dayType, timeSlot)];
-
-      // Use special period key if applicable, otherwise regular dayType
-      const bucketDayType = specialRate !== null ? 'holiday' : dayType;
-      const key = specialRate !== null ? `special:${timeSlot}` : `${dayType}:${timeSlot}`;
+      // Key by special period ID + timeSlot, or regular dayType + timeSlot
+      const key = special ? `special:${special.period.id}:${timeSlot}` : `${dayType}:${timeSlot}`;
+      const bucketDayType = special ? 'holiday' : dayType;
 
       const bucket = buckets.get(key);
       if (bucket) {
         bucket.hours++;
         bucket.wage += rate;
       } else {
-        buckets.set(key, { dayType: bucketDayType, timeSlot, hours: 1, wage: rate });
+        buckets.set(key, {
+          dayType: bucketDayType, timeSlot, hours: 1, wage: rate,
+          specialPeriodName: special?.period.name,
+        });
       }
     }
   }
@@ -104,7 +112,7 @@ export function calculateMonthlyWage(
   const dayOrder: DayType[] = ['weekday', 'saturday', 'sunday', 'holiday'];
   const slotOrder: TimeSlot[] = ['morning', 'afternoon', 'evening'];
 
-  // Regular buckets first
+  // Regular buckets
   for (const dt of dayOrder) {
     for (const ts of slotOrder) {
       const bucket = buckets.get(`${dt}:${ts}`);
@@ -117,14 +125,17 @@ export function calculateMonthlyWage(
     }
   }
 
-  // Special period buckets
-  for (const ts of slotOrder) {
-    const bucket = buckets.get(`special:${ts}`);
-    if (bucket && bucket.hours > 0) {
-      rows.push({ dayType: 'holiday', timeSlot: ts, hours: bucket.hours, rate: Math.round(bucket.wage / bucket.hours * 10) / 10, wage: bucket.wage });
-      totalHours += bucket.hours;
-      totalWage += bucket.wage;
-    }
+  // Special period buckets - each period shown separately with its name
+  for (const [key, bucket] of buckets) {
+    if (!key.startsWith('special:') || bucket.hours === 0) continue;
+    const rate = Math.round(bucket.wage / bucket.hours * 10) / 10;
+    rows.push({
+      dayType: 'holiday', timeSlot: bucket.timeSlot,
+      hours: bucket.hours, rate, wage: bucket.wage,
+      specialPeriodName: bucket.specialPeriodName,
+    });
+    totalHours += bucket.hours;
+    totalWage += bucket.wage;
   }
 
   return { rows, totalHours, totalWage, workDays: workDates.size };

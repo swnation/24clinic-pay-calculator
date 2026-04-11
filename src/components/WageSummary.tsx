@@ -121,7 +121,10 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
                 {breakdown.rows.map((row, i) => (
                   <tr key={i} className="border-b hover:bg-gray-50">
                     <td className="px-2 sm:px-4 py-2">
-                      {DAY_TYPE_LABELS[row.dayType]} {TIME_SLOT_LABELS[row.timeSlot]}
+                      {row.specialPeriodName
+                        ? <><span className="text-purple-600">{row.specialPeriodName}</span> {TIME_SLOT_LABELS[row.timeSlot]}</>
+                        : <>{DAY_TYPE_LABELS[row.dayType]} {TIME_SLOT_LABELS[row.timeSlot]}</>
+                      }
                     </td>
                     <td className="text-right px-2 sm:px-4 py-2">{row.hours}h</td>
                     <td className="text-right px-2 sm:px-4 py-2">{row.rate}</td>
