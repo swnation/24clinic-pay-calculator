@@ -15,6 +15,74 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'settings', label: '설정' },
 ];
 
+function CloudSyncButton() {
+  const {
+    googleClientId, isGoogleSignedIn, googleSignIn, googleSignOut,
+    saveToCloud, loadFromCloud, cloudSyncStatus,
+  } = useAppStore();
+  const [showMenu, setShowMenu] = useState(false);
+
+  if (!googleClientId) return null;
+
+  if (!isGoogleSignedIn) {
+    return (
+      <button
+        onClick={googleSignIn}
+        className="text-[10px] sm:text-xs bg-blue-600 text-white px-2 py-1 rounded active:bg-blue-700"
+      >
+        Google 로그인
+      </button>
+    );
+  }
+
+  const statusText = cloudSyncStatus === 'saving' ? '저장중...'
+    : cloudSyncStatus === 'loading' ? '불러오는중...'
+    : cloudSyncStatus === 'success' ? '완료'
+    : cloudSyncStatus === 'error' ? '오류'
+    : '';
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        className={`text-[10px] sm:text-xs px-2 py-1 rounded ${
+          cloudSyncStatus === 'success' ? 'bg-green-600 text-white'
+          : cloudSyncStatus === 'error' ? 'bg-red-600 text-white'
+          : 'bg-gray-700 text-gray-300'
+        }`}
+      >
+        {statusText || 'Cloud'}
+      </button>
+      {showMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+          <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border z-50 py-1 min-w-[140px]">
+            <button
+              onClick={() => { saveToCloud(); setShowMenu(false); }}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 active:bg-gray-100"
+            >
+              Drive에 저장
+            </button>
+            <button
+              onClick={() => { loadFromCloud(); setShowMenu(false); }}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 active:bg-gray-100"
+            >
+              Drive에서 불러오기
+            </button>
+            <hr className="my-1" />
+            <button
+              onClick={() => { googleSignOut(); setShowMenu(false); }}
+              className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50 active:bg-gray-100"
+            >
+              로그아웃
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const { state } = useAppStore();
   const now = new Date();
@@ -33,11 +101,14 @@ function App() {
       <header className="bg-gray-900 text-white safe-top">
         <div className="max-w-6xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between">
           <h1 className="text-sm sm:text-lg font-bold">24시 열린의원</h1>
-          <span className="text-xs sm:text-sm text-gray-400">{state.branchName}점</span>
+          <div className="flex items-center gap-2">
+            <CloudSyncButton />
+            <span className="text-xs sm:text-sm text-gray-400">{state.branchName}점</span>
+          </div>
         </div>
       </header>
 
-      {/* Tab navigation - fixed at top on mobile */}
+      {/* Tab navigation */}
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto flex">
           {TABS.map(t => (

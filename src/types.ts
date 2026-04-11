@@ -29,13 +29,7 @@ export interface RatesBySlot {
   holidayEvening: number;     // 공휴일 저녁 (19-24)
 }
 
-export interface DoctorMonthlyRate {
-  doctorId: string;
-  month: string; // YYYY-MM
-  rates: Partial<RatesBySlot>;
-}
-
-// 지점 월별 시급 (모든 의사에게 적용, 의사별 오버라이드보다 낮은 우선순위)
+// 지점 월별 시급 (모든 의사에게 적용)
 export interface BranchMonthlyRate {
   month: string; // YYYY-MM
   rates: Partial<RatesBySlot>;

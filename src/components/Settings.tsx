@@ -70,6 +70,7 @@ export default function Settings() {
     state, addDoctor, updateDoctor, removeDoctor,
     setDefaultRates, addSpecialRatePeriod, removeSpecialRatePeriod,
     toggleHoliday, setBranchName,
+    googleClientId, setGoogleClientId,
   } = useAppStore();
 
   const [newDoctorName, setNewDoctorName] = useState('');
@@ -358,6 +359,29 @@ export default function Settings() {
         </div>
       </section>
 
+      {/* Google Drive */}
+      <section className="bg-white rounded-lg border border-gray-200 p-6">
+        <h3 className="font-bold text-lg mb-4">Google Drive 연동</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Google Drive에 데이터를 저장하면 브라우저 데이터가 지워져도 복구할 수 있습니다.
+        </p>
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Client ID</label>
+          <input
+            type="text"
+            value={googleClientId}
+            onChange={e => setGoogleClientId(e.target.value)}
+            placeholder="xxx.apps.googleusercontent.com"
+            className="flex-1 border rounded-lg px-3 py-2 text-xs sm:text-sm"
+          />
+        </div>
+        {!googleClientId && (
+          <p className="text-xs text-gray-400 mt-2">
+            Google Cloud Console에서 OAuth 클라이언트 ID를 생성하여 입력하세요.
+          </p>
+        )}
+      </section>
+
       {/* Data management */}
       <section className="bg-white rounded-lg border border-gray-200 p-6">
         <h3 className="font-bold text-lg mb-4">데이터 관리</h3>
@@ -365,7 +389,7 @@ export default function Settings() {
           <button
             onClick={() => {
               const data = JSON.stringify(
-                { doctors: state.doctors, shifts: state.shifts, defaultRates: state.defaultRates, doctorMonthlyRates: state.doctorMonthlyRates, customHolidays: state.customHolidays, branchName: state.branchName },
+                { doctors: state.doctors, shifts: state.shifts, defaultRates: state.defaultRates, customHolidays: state.customHolidays, branchName: state.branchName },
                 null, 2
               );
               const blob = new Blob([data], { type: 'application/json' });

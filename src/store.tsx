@@ -1,13 +1,13 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import type { Doctor, Shift, RatesBySlot, DoctorMonthlyRate, BranchMonthlyRate, SpecialRatePeriod } from './types';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import type { Doctor, Shift, RatesBySlot, BranchMonthlyRate, SpecialRatePeriod } from './types';
 import { DEFAULT_RATES, DOCTOR_COLORS } from './types';
 import { getKoreanHolidaysForYear } from './utils/holidays';
+import { signIn, signOut, isSignedIn, saveToDrive, loadFromDrive } from './services/googleDrive';
 
 interface AppState {
   doctors: Doctor[];
   shifts: Shift[];
   defaultRates: RatesBySlot;
-  doctorMonthlyRates: DoctorMonthlyRate[];
   branchMonthlyRates: BranchMonthlyRate[];
   specialRatePeriods: SpecialRatePeriod[];
   customHolidays: string[];
@@ -24,8 +24,6 @@ interface AppContextType {
   removeShift: (id: string) => void;
   bulkImport: (shifts: { doctorName: string; date: string; startHour: number; endHour: number; room: 1 | 2 }[], monthsToReplace: string[]) => void;
   setDefaultRates: (rates: RatesBySlot) => void;
-  setDoctorMonthlyRate: (doctorId: string, month: string, rates: Partial<RatesBySlot>) => void;
-  removeDoctorMonthlyRate: (doctorId: string, month: string) => void;
   setBranchMonthlyRate: (month: string, rates: Partial<RatesBySlot>) => void;
   removeBranchMonthlyRate: (month: string) => void;
   addSpecialRatePeriod: (period: Omit<SpecialRatePeriod, 'id'>) => void;
@@ -35,6 +33,15 @@ interface AppContextType {
   setBranchName: (name: string) => void;
   getShiftsForMonth: (month: string) => Shift[];
   getShiftsForDoctor: (doctorId: string, month: string) => Shift[];
+  // Google Drive sync
+  googleClientId: string;
+  setGoogleClientId: (id: string) => void;
+  isGoogleSignedIn: boolean;
+  googleSignIn: () => Promise<void>;
+  googleSignOut: () => void;
+  saveToCloud: () => Promise<boolean>;
+  loadFromCloud: () => Promise<boolean>;
+  cloudSyncStatus: 'idle' | 'saving' | 'loading' | 'success' | 'error';
 }
 
 const STORAGE_KEY = '24clinic-pay-calculator-state';
@@ -75,7 +82,6 @@ const defaultState: AppState = {
   doctors: defaultDoctors,
   shifts: [],
   defaultRates: { ...DEFAULT_RATES },
-  doctorMonthlyRates: [],
   branchMonthlyRates: presetBranchMonthlyRates,
   specialRatePeriods: [],
   customHolidays: defaultHolidays,
@@ -148,7 +154,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...s,
       doctors: s.doctors.filter(d => d.id !== id),
       shifts: s.shifts.filter(sh => sh.doctorId !== id),
-      doctorMonthlyRates: s.doctorMonthlyRates.filter(r => r.doctorId !== id),
     }));
   };
 
@@ -220,30 +225,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState(s => ({ ...s, defaultRates: rates }));
   };
 
-  const setDoctorMonthlyRate = (doctorId: string, month: string, rates: Partial<RatesBySlot>) => {
-    setState(s => {
-      const existing = s.doctorMonthlyRates.findIndex(
-        r => r.doctorId === doctorId && r.month === month
-      );
-      const newRates = [...s.doctorMonthlyRates];
-      if (existing >= 0) {
-        newRates[existing] = { doctorId, month, rates };
-      } else {
-        newRates.push({ doctorId, month, rates });
-      }
-      return { ...s, doctorMonthlyRates: newRates };
-    });
-  };
-
-  const removeDoctorMonthlyRate = (doctorId: string, month: string) => {
-    setState(s => ({
-      ...s,
-      doctorMonthlyRates: s.doctorMonthlyRates.filter(
-        r => !(r.doctorId === doctorId && r.month === month)
-      ),
-    }));
-  };
-
   const setBranchMonthlyRate = (month: string, rates: Partial<RatesBySlot>) => {
     setState(s => {
       const existing = s.branchMonthlyRates.findIndex(r => r.month === month);
@@ -303,17 +284,82 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return state.shifts.filter(s => s.doctorId === doctorId && s.date.startsWith(month));
   };
 
+  // Google Drive sync
+  const CLIENT_ID_KEY = '24clinic-google-client-id';
+  const [googleClientId, setGoogleClientIdState] = useState(() => localStorage.getItem(CLIENT_ID_KEY) || '');
+  const [isGoogleSignedInState, setIsGoogleSignedIn] = useState(false);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'saving' | 'loading' | 'success' | 'error'>('idle');
+
+  const setGoogleClientId = (id: string) => {
+    localStorage.setItem(CLIENT_ID_KEY, id);
+    setGoogleClientIdState(id);
+  };
+
+  const googleSignIn = useCallback(async () => {
+    if (!googleClientId) return;
+    try {
+      await signIn(googleClientId);
+      setIsGoogleSignedIn(true);
+    } catch {
+      setIsGoogleSignedIn(false);
+    }
+  }, [googleClientId]);
+
+  const googleSignOut = () => {
+    signOut();
+    setIsGoogleSignedIn(false);
+  };
+
+  const saveToCloud = useCallback(async (): Promise<boolean> => {
+    if (!isSignedIn()) return false;
+    setCloudSyncStatus('saving');
+    try {
+      const ok = await saveToDrive(state as unknown as Record<string, unknown>);
+      setCloudSyncStatus(ok ? 'success' : 'error');
+      setTimeout(() => setCloudSyncStatus('idle'), 2000);
+      return ok;
+    } catch {
+      setCloudSyncStatus('error');
+      setTimeout(() => setCloudSyncStatus('idle'), 2000);
+      return false;
+    }
+  }, [state]);
+
+  const loadFromCloud = useCallback(async (): Promise<boolean> => {
+    if (!isSignedIn()) return false;
+    setCloudSyncStatus('loading');
+    try {
+      const data = await loadFromDrive();
+      if (!data) {
+        setCloudSyncStatus('error');
+        setTimeout(() => setCloudSyncStatus('idle'), 2000);
+        return false;
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      window.location.reload();
+      return true;
+    } catch {
+      setCloudSyncStatus('error');
+      setTimeout(() => setCloudSyncStatus('idle'), 2000);
+      return false;
+    }
+  }, []);
+
   return (
     <AppContext.Provider value={{
       state,
       addDoctor, updateDoctor, removeDoctor,
       addShift, updateShift, removeShift, bulkImport,
-      setDefaultRates, setDoctorMonthlyRate, removeDoctorMonthlyRate,
+      setDefaultRates,
       setBranchMonthlyRate, removeBranchMonthlyRate,
       addSpecialRatePeriod, removeSpecialRatePeriod,
       toggleHoliday, setCustomHolidays,
       setBranchName,
       getShiftsForMonth, getShiftsForDoctor,
+      googleClientId, setGoogleClientId,
+      isGoogleSignedIn: isGoogleSignedInState,
+      googleSignIn, googleSignOut,
+      saveToCloud, loadFromCloud, cloudSyncStatus,
     }}>
       {children}
     </AppContext.Provider>
