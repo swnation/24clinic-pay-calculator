@@ -15,10 +15,12 @@ function pad(n: number): string {
 export default function ScheduleCompare({ year, month }: Props) {
   const { state, getShiftsForMonth } = useAppStore();
   const [image, setImage] = useState<string | null>(null);
+  const [filterDoctor, setFilterDoctor] = useState<string>('all');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const monthStr = `${year}-${pad(month)}`;
   const shifts = getShiftsForMonth(monthStr);
+  const filteredCount = filterDoctor === 'all' ? shifts.length : shifts.filter(s => s.doctorId === filterDoctor).length;
 
   const getDoctorName = (id: string) => state.doctors.find(d => d.id === id)?.name || '?';
   const getDoctorColor = (id: string) => state.doctors.find(d => d.id === id)?.color || '#E0E0E0';
@@ -92,7 +94,9 @@ export default function ScheduleCompare({ year, month }: Props) {
                 {room1.map(s => (
                   <div
                     key={s.id}
-                    className="text-[8px] sm:text-[9px] leading-tight px-0.5 py-px rounded-sm whitespace-nowrap overflow-hidden"
+                    className={`text-[8px] sm:text-[9px] leading-tight px-0.5 py-px rounded-sm whitespace-nowrap overflow-hidden ${
+                      filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''
+                    }`}
                     style={{ backgroundColor: getDoctorColor(s.doctorId) }}
                   >
                     <span className="font-medium">{getDoctorName(s.doctorId)}</span>
@@ -139,9 +143,44 @@ export default function ScheduleCompare({ year, month }: Props) {
         </div>
       ) : (
         <div>
+          {/* Doctor filter */}
+          <div className="flex flex-wrap gap-1.5 mb-3 px-1">
+            <button
+              onClick={() => setFilterDoctor('all')}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
+                filterDoctor === 'all' ? 'border-gray-700 bg-white shadow-sm' : 'border-gray-200 opacity-50'
+              }`}
+            >
+              전체
+            </button>
+            {state.doctors.map(d => {
+              const hasShifts = shifts.some(s => s.doctorId === d.id);
+              if (!hasShifts) return null;
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => setFilterDoctor(filterDoctor === d.id ? 'all' : d.id)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
+                    filterDoctor === d.id ? 'border-gray-700 shadow-sm' : 'border-gray-200 opacity-50'
+                  }`}
+                  style={{ backgroundColor: d.color }}
+                >
+                  {d.name}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Controls */}
           <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-sm font-bold">{year}.{pad(month)} 비교</h3>
+            <h3 className="text-sm font-bold">
+              {year}.{pad(month)} 비교
+              {filterDoctor !== 'all' && (
+                <span className="ml-1 text-blue-600">
+                  ({getDoctorName(filterDoctor)} {filteredCount}건)
+                </span>
+              )}
+            </h3>
             <div className="flex gap-2">
               <button
                 onClick={() => fileRef.current?.click()}
