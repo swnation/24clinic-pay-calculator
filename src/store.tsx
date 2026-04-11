@@ -87,7 +87,21 @@ function loadState(): AppState {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      return { ...defaultState, ...parsed };
+      // Merge defaultRates with stored rates to handle migration from old 5-key to new 12-key structure
+      const mergedRates = { ...DEFAULT_RATES, ...(parsed.defaultRates || {}) };
+      // Remove old keys that no longer exist
+      const validKeys = Object.keys(DEFAULT_RATES);
+      for (const key of Object.keys(mergedRates)) {
+        if (!validKeys.includes(key)) delete mergedRates[key as keyof typeof mergedRates];
+      }
+      return {
+        ...defaultState,
+        ...parsed,
+        defaultRates: mergedRates,
+        // Ensure new fields exist even if stored data is old
+        branchMonthlyRates: parsed.branchMonthlyRates || presetBranchMonthlyRates,
+        specialRatePeriods: parsed.specialRatePeriods || [],
+      };
     }
   } catch {
     // ignore
