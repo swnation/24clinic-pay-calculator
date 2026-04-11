@@ -47,9 +47,9 @@ interface AppContextType {
 const STORAGE_KEY = '24clinic-pay-calculator-state';
 
 const defaultDoctors: Doctor[] = [
+  { id: 'd3', name: '유성우', color: '#E0E0E0' },
   { id: 'd1', name: '지아영', color: DOCTOR_COLORS[0] },
   { id: 'd2', name: '김정훈', color: DOCTOR_COLORS[1] },
-  { id: 'd3', name: '유성우', color: '#E0E0E0' },
   { id: 'd4', name: '김기현', color: DOCTOR_COLORS[3] },
   { id: 'd5', name: '김민욱', color: DOCTOR_COLORS[2] },
   { id: 'd6', name: '이현수', color: DOCTOR_COLORS[8] },
