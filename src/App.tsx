@@ -3,12 +3,14 @@ import type { Tab } from './types';
 import Calendar from './components/Calendar';
 import WageSummary from './components/WageSummary';
 import CalendarExport from './components/CalendarExport';
+import ScheduleCompare from './components/ScheduleCompare';
 import Settings from './components/Settings';
 import { useAppStore } from './store';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'schedule', label: '스케줄' },
   { key: 'wage', label: '급여계산' },
+  { key: 'compare', label: '비교' },
   { key: 'export', label: '캘린더' },
   { key: 'settings', label: '설정' },
 ];
@@ -61,6 +63,9 @@ function App() {
         )}
         {tab === 'wage' && (
           <WageSummary year={year} month={month} onMonthChange={handleMonthChange} />
+        )}
+        {tab === 'compare' && (
+          <ScheduleCompare year={year} month={month} />
         )}
         {tab === 'export' && (
           <CalendarExport year={year} month={month} onMonthChange={handleMonthChange} />

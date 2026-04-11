@@ -79,4 +79,4 @@ export const DOCTOR_COLORS = [
   '#B39DDB', // deep purple
 ];
 
-export type Tab = 'schedule' | 'wage' | 'export' | 'settings';
+export type Tab = 'schedule' | 'wage' | 'compare' | 'export' | 'settings';
