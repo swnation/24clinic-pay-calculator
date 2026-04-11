@@ -6,13 +6,14 @@ import { isHolidayOrSunday, isSaturday, getHolidayName } from '../utils/holidays
 interface Props {
   year: number;
   month: number;
+  onMonthChange: (year: number, month: number) => void;
 }
 
 function pad(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
-export default function ScheduleCompare({ year, month }: Props) {
+export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const { state, getShiftsForMonth } = useAppStore();
   const [image, setImage] = useState<string | null>(null);
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
@@ -147,6 +148,19 @@ export default function ScheduleCompare({ year, month }: Props) {
         </div>
       ) : (
         <div>
+          {/* Month navigation */}
+          <div className="flex items-center justify-center gap-6 mb-3">
+            <button
+              onClick={() => { if (month === 1) onMonthChange(year - 1, 12); else onMonthChange(year, month - 1); }}
+              className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none"
+            >&lt;</button>
+            <h2 className="text-lg font-bold">{year}.{pad(month)}</h2>
+            <button
+              onClick={() => { if (month === 12) onMonthChange(year + 1, 1); else onMonthChange(year, month + 1); }}
+              className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none"
+            >&gt;</button>
+          </div>
+
           {/* Toggle: 원본 / 파싱결과 */}
           <div className="flex items-center gap-1 mb-3 bg-gray-100 rounded-lg p-1 max-w-xs mx-auto">
             <button
