@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { DAY_TYPE_LABELS, TIME_SLOT_LABELS } from '../types';
+import type { RatesBySlot, DayType, TimeSlot } from '../types';
+import { DAY_TYPE_LABELS, TIME_SLOT_LABELS, rateKey } from '../types';
 import { useAppStore } from '../store';
 import { getEffectiveRates, calculateMonthlyWage, calculateWeeklyHours } from '../utils/wageCalculator';
 
@@ -13,9 +14,13 @@ function pad(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
+const DAY_TYPES: DayType[] = ['weekday', 'saturday', 'sunday', 'holiday'];
+const TIME_SLOTS: TimeSlot[] = ['morning', 'afternoon', 'evening'];
+
 export default function WageSummary({ year, month, onMonthChange }: Props) {
-  const { state, getShiftsForDoctor } = useAppStore();
+  const { state, getShiftsForDoctor, setBranchMonthlyRate } = useAppStore();
   const [selectedDoctor, setSelectedDoctor] = useState(state.doctors[0]?.id || '');
+  const [showRateEditor, setShowRateEditor] = useState(false);
 
   const monthStr = `${year}-${pad(month)}`;
 
@@ -140,6 +145,80 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
               <div className="text-xs text-gray-500">총 급여 (원)</div>
             </div>
           </div>
+
+          {/* Branch monthly rate editor */}
+          {(() => {
+            const branchOverride = state.branchMonthlyRates.find(r => r.month === monthStr);
+            const handleRateChange = (key: keyof RatesBySlot, value: string) => {
+              const num = value === '' ? undefined : Number(value);
+              const current = branchOverride?.rates || {};
+              const newRates: Partial<RatesBySlot> = { ...current };
+              if (num !== undefined && !isNaN(num)) {
+                newRates[key] = num;
+              } else {
+                delete newRates[key];
+              }
+              setBranchMonthlyRate(monthStr, newRates);
+            };
+
+            return (
+              <div className="bg-white rounded-lg border border-gray-200 mb-6">
+                <button
+                  className="w-full px-4 py-3 text-left text-sm font-medium flex justify-between items-center hover:bg-gray-50"
+                  onClick={() => setShowRateEditor(!showRateEditor)}
+                >
+                  <span>{state.branchName}점 시급 설정 ({year}.{pad(month)})</span>
+                  <span className="text-gray-400">{showRateEditor ? '▲' : '▼'}</span>
+                </button>
+                {showRateEditor && (
+                  <div className="px-3 sm:px-4 pb-4 border-t">
+                    <p className="text-xs text-gray-500 mt-3 mb-3">
+                      비워두면 기본급이 적용됩니다. (단위: 만원/시간)
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs sm:text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 pr-2"></th>
+                            {TIME_SLOTS.map(ts => (
+                              <th key={ts} className="text-center py-2 px-1 text-gray-500 font-medium">
+                                {ts === 'morning' ? '오전' : ts === 'afternoon' ? '오후' : '저녁'}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {DAY_TYPES.map(dt => (
+                            <tr key={dt} className="border-b last:border-b-0">
+                              <td className="py-2 pr-2 font-medium text-gray-700 whitespace-nowrap">
+                                {DAY_TYPE_LABELS[dt]}
+                              </td>
+                              {TIME_SLOTS.map(ts => {
+                                const key = rateKey(dt, ts);
+                                return (
+                                  <td key={ts} className="py-1.5 px-1">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.5"
+                                      placeholder={`${state.defaultRates[key]}`}
+                                      value={branchOverride?.rates[key] ?? ''}
+                                      onChange={e => handleRateChange(key, e.target.value)}
+                                      className="w-full border rounded px-2 py-1.5 text-sm text-center min-w-[50px]"
+                                    />
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Weekly breakdown */}
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
