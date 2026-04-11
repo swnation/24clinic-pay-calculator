@@ -80,6 +80,7 @@ export function isSaturday(dateStr: string): boolean {
   return new Date(dateStr + 'T00:00:00').getDay() === 6;
 }
 
+// customHolidays is the single source of truth for active holidays
 export function isHolidayOrSunday(dateStr: string, customHolidays: string[]): boolean {
-  return isSunday(dateStr) || isKoreanHoliday(dateStr) || customHolidays.includes(dateStr);
+  return isSunday(dateStr) || customHolidays.includes(dateStr);
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { RatesBySlot, DayType, TimeSlot, SpecialRatePeriod } from '../types';
 import { DAY_TYPE_LABELS, rateKey, DOCTOR_COLORS } from '../types';
 import { useAppStore } from '../store';
@@ -117,7 +117,11 @@ export default function Settings() {
     }
   };
 
-  // yearHolidays removed - now computed inline in render
+  const holidayList = useMemo(() => {
+    const builtInDates = getKoreanHolidaysForYear(holidayYear);
+    const customDates = state.customHolidays.filter(d => d.startsWith(`${holidayYear}-`) && !builtInDates.includes(d));
+    return [...new Set([...builtInDates, ...customDates])].sort();
+  }, [holidayYear, state.customHolidays]);
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
@@ -313,44 +317,37 @@ export default function Settings() {
         </div>
 
         <div className="space-y-1 mb-4 max-h-72 overflow-y-auto">
-          {(() => {
-            // Show all known Korean holidays + custom holidays for this year
-            const builtInDates = getKoreanHolidaysForYear(holidayYear);
-            const customDates = state.customHolidays.filter(d => d.startsWith(`${holidayYear}-`) && !builtInDates.includes(d));
-            const allDates = [...new Set([...builtInDates, ...customDates])].sort();
+          {holidayList.map(dateStr => {
+            const dateObj = new Date(dateStr + 'T00:00:00');
             const dayNamesArr = ['일', '월', '화', '수', '목', '금', '토'];
+            const name = getHolidayName(dateStr);
+            const isBuiltIn = isKoreanHoliday(dateStr);
+            const isActive = state.customHolidays.includes(dateStr);
 
-            return allDates.map(dateStr => {
-              const dateObj = new Date(dateStr + 'T00:00:00');
-              const name = getHolidayName(dateStr);
-              const isBuiltIn = isKoreanHoliday(dateStr);
-              const isActive = state.customHolidays.includes(dateStr);
-
-              return (
-                <div
-                  key={dateStr}
-                  className={`flex items-center justify-between py-2 px-3 rounded cursor-pointer active:bg-gray-100 ${
-                    isActive ? 'hover:bg-gray-50' : 'bg-gray-100 opacity-50'
-                  }`}
-                  onClick={() => toggleHoliday(dateStr)}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`w-4 h-4 rounded border-2 flex items-center justify-center text-[10px] ${
-                      isActive ? 'border-red-500 bg-red-500 text-white' : 'border-gray-300'
-                    }`}>
-                      {isActive ? '✓' : ''}
-                    </span>
-                    <span className={`text-sm ${dateObj.getDay() === 0 ? 'text-red-500' : dateObj.getDay() === 6 ? 'text-blue-500' : ''}`}>
-                      {dateStr.slice(5)} ({dayNamesArr[dateObj.getDay()]})
-                    </span>
-                    {name && <span className="text-xs text-gray-500">{name}</span>}
-                    {isBuiltIn && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 rounded">기본</span>}
-                    {!isBuiltIn && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 rounded">추가</span>}
-                  </div>
+            return (
+              <div
+                key={dateStr}
+                className={`flex items-center justify-between py-2 px-3 rounded cursor-pointer active:bg-gray-100 ${
+                  isActive ? 'hover:bg-gray-50' : 'bg-gray-100 opacity-50'
+                }`}
+                onClick={() => toggleHoliday(dateStr)}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`w-4 h-4 rounded border-2 flex items-center justify-center text-[10px] ${
+                    isActive ? 'border-red-500 bg-red-500 text-white' : 'border-gray-300'
+                  }`}>
+                    {isActive ? '✓' : ''}
+                  </span>
+                  <span className={`text-sm ${dateObj.getDay() === 0 ? 'text-red-500' : dateObj.getDay() === 6 ? 'text-blue-500' : ''}`}>
+                    {dateStr.slice(5)} ({dayNamesArr[dateObj.getDay()]})
+                  </span>
+                  {name && <span className="text-xs text-gray-500">{name}</span>}
+                  {isBuiltIn && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 rounded">기본</span>}
+                  {!isBuiltIn && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 rounded">추가</span>}
                 </div>
-              );
-            });
-          })()}
+              </div>
+            );
+          })}
         </div>
 
         <div className="flex gap-2">
@@ -383,11 +380,11 @@ export default function Settings() {
             onChange={e => setGoogleClientId(e.target.value)}
             placeholder="xxx.apps.googleusercontent.com"
             className={`flex-1 border rounded-lg px-3 py-2 text-xs sm:text-sm ${
-              googleClientId ? 'border-green-400 bg-green-50' : ''
+              googleClientId.trim() ? 'border-green-400 bg-green-50' : ''
             }`}
           />
         </div>
-        {googleClientId ? (
+        {googleClientId.trim() ? (
           <p className="text-xs text-green-600 mt-2">
             Client ID 저장됨. 상단 헤더의 "Google 로그인" 버튼으로 연동하세요.
           </p>
