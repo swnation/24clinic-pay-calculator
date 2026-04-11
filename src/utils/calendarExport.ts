@@ -89,7 +89,8 @@ export function generateCalendarEvents(
       && blocks[0].endHour === 24;
 
     if (isFullShift) {
-      events.push({ title: branchName, date, startHour: 9, endHour: 24 });
+      // 풀근무: 잠실1 또는 잠실2 (시간 없이)
+      events.push({ title: `${branchName}${blocks[0].room}`, date, startHour: 9, endHour: 24 });
     } else {
       const parts = blocks.map(b =>
         `${branchName}${b.room}(${pad(b.startHour)}-${pad(b.endHour)})`

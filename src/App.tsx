@@ -136,7 +136,7 @@ function App() {
           <WageSummary year={year} month={month} onMonthChange={handleMonthChange} />
         )}
         {tab === 'compare' && (
-          <ScheduleCompare year={year} month={month} />
+          <ScheduleCompare year={year} month={month} onMonthChange={handleMonthChange} />
         )}
         {tab === 'export' && (
           <CalendarExport year={year} month={month} onMonthChange={handleMonthChange} />
