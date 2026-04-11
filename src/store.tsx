@@ -108,6 +108,8 @@ function loadState(): AppState {
         // Ensure new fields exist even if stored data is old
         branchMonthlyRates: parsed.branchMonthlyRates || presetBranchMonthlyRates,
         specialRatePeriods: parsed.specialRatePeriods || [],
+        // 유성우(본인)를 항상 첫 번째로
+        doctors: [...(parsed.doctors || defaultDoctors)].sort((a: Doctor) => a.name === '유성우' ? -1 : 0),
       };
     }
   } catch {
