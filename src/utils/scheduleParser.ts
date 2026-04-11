@@ -60,12 +60,17 @@ function parseSingleMonth(text: string, yearMonth: { year: number; month: number
   };
 
   for (const line of lines) {
-    const trimmed = line.trim();
+    // Normalize: remove non-breaking spaces, BOM, and normalize dashes/brackets
+    const trimmed = line
+      .replace(/[\u00A0\uFEFF]/g, ' ')
+      .replace(/[–—]/g, '-')      // en-dash, em-dash → hyphen
+      .replace(/（/g, '(').replace(/）/g, ')')  // full-width brackets
+      .trim();
     if (!trimmed) continue;
 
     // Check if this is a day number (1-31, optionally followed by holiday name)
     const dayMatch = trimmed.match(/^(\d{1,2})(?:\s+\S+.*)?$/);
-    if (dayMatch && !/\(\d{2}-\d{2}\)/.test(trimmed)) {
+    if (dayMatch && !/\(\d{1,2}-\d{1,2}\)/.test(trimmed)) {
       const num = parseInt(dayMatch[1]);
       if (num >= 1 && num <= 31) {
         flushDay();
@@ -75,8 +80,8 @@ function parseSingleMonth(text: string, yearMonth: { year: number; month: number
       }
     }
 
-    // Check if this is a shift entry: "이름 (시작-종료)"
-    const shiftMatch = trimmed.match(/^(.+?)\s*\((\d{2})-(\d{2})\)$/);
+    // Check if this is a shift entry: "이름 (시작-종료)" (supports 1 or 2 digit hours)
+    const shiftMatch = trimmed.match(/^(.+?)\s*\((\d{1,2})-(\d{1,2})\)$/);
     if (shiftMatch && currentDay !== null) {
       dayShiftBuffer.push({
         name: shiftMatch[1].trim(),
