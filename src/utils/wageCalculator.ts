@@ -1,5 +1,6 @@
-import type { Shift, RatesBySlot, WageBreakdown, WeeklyHours, DoctorMonthlyRate } from '../types';
-import { isSaturday, isHolidayOrSunday } from './holidays';
+import type { Shift, RatesBySlot, WageBreakdown, WageBreakdownRow, WeeklyHours, DoctorMonthlyRate, DayType, TimeSlot, SpecialRatePeriod } from '../types';
+import { rateKey } from '../types';
+import { isSaturday, isHolidayOrSunday, isSunday } from './holidays';
 
 export function getEffectiveRates(
   doctorId: string,
@@ -11,38 +12,51 @@ export function getEffectiveRates(
     r => r.doctorId === doctorId && r.month === month
   );
   if (!override) return defaultRates;
-  return {
-    weekdayDaytime: override.rates.weekdayDaytime ?? defaultRates.weekdayDaytime,
-    weekdayEvening: override.rates.weekdayEvening ?? defaultRates.weekdayEvening,
-    saturdayDaytime: override.rates.saturdayDaytime ?? defaultRates.saturdayDaytime,
-    saturdayEvening: override.rates.saturdayEvening ?? defaultRates.saturdayEvening,
-    sundayHoliday: override.rates.sundayHoliday ?? defaultRates.sundayHoliday,
-  };
+  return { ...defaultRates, ...override.rates };
 }
 
 function isBreakHour(h: number): boolean {
   return h === 13 || h === 18;
 }
 
-function getHourRate(
-  hour: number,
-  isSat: boolean,
-  isHolSun: boolean,
-  rates: RatesBySlot
-): number {
-  if (isHolSun) return rates.sundayHoliday;
-  if (isSat) return hour >= 19 ? rates.saturdayEvening : rates.saturdayDaytime;
-  return hour >= 19 ? rates.weekdayEvening : rates.weekdayDaytime;
+function getTimeSlot(hour: number): TimeSlot {
+  if (hour >= 19) return 'evening';
+  if (hour >= 14) return 'afternoon';
+  return 'morning';
 }
 
-function getSlotCategory(
-  hour: number,
-  isSat: boolean,
-  isHolSun: boolean
-): keyof WageBreakdown {
-  if (isHolSun) return 'sundayHolidayHours';
-  if (isSat) return hour >= 19 ? 'saturdayEveningHours' : 'saturdayDaytimeHours';
-  return hour >= 19 ? 'weekdayEveningHours' : 'weekdayDaytimeHours';
+function getDayType(dateStr: string, customHolidays: string[]): DayType {
+  // 공휴일 (not Sunday) takes priority over day-of-week
+  const isSun = isSunday(dateStr);
+  const isHol = isHolidayOrSunday(dateStr, customHolidays) && !isSun;
+
+  if (isHol) return 'holiday';
+  if (isSun) return 'sunday';
+  if (isSaturday(dateStr)) return 'saturday';
+  return 'weekday';
+}
+
+interface SpecialMatch {
+  period: SpecialRatePeriod;
+  rate: number;
+}
+
+function findSpecialPeriod(
+  dateStr: string,
+  timeSlot: TimeSlot,
+  specialPeriods: SpecialRatePeriod[]
+): SpecialMatch | null {
+  // Later-added (higher index) periods take priority over earlier ones
+  for (let i = specialPeriods.length - 1; i >= 0; i--) {
+    const period = specialPeriods[i];
+    if (dateStr >= period.startDate && dateStr <= period.endDate) {
+      const rate = timeSlot === 'morning' ? period.morning
+        : timeSlot === 'afternoon' ? period.afternoon
+        : period.evening;
+      return { period, rate };
+    }
+  }
+  return null;
 }
 
 export function calculateWorkHours(shift: Shift): number {
@@ -56,49 +70,75 @@ export function calculateWorkHours(shift: Shift): number {
 export function calculateMonthlyWage(
   shifts: Shift[],
   rates: RatesBySlot,
-  customHolidays: string[]
+  customHolidays: string[],
+  specialPeriods: SpecialRatePeriod[]
 ): WageBreakdown {
-  const breakdown: WageBreakdown = {
-    weekdayDaytimeHours: 0,
-    weekdayEveningHours: 0,
-    saturdayDaytimeHours: 0,
-    saturdayEveningHours: 0,
-    sundayHolidayHours: 0,
-    weekdayDaytimeWage: 0,
-    weekdayEveningWage: 0,
-    saturdayDaytimeWage: 0,
-    saturdayEveningWage: 0,
-    sundayHolidayWage: 0,
-    totalHours: 0,
-    totalWage: 0,
-    workDays: 0,
-  };
-
+  const buckets = new Map<string, { dayType: DayType; timeSlot: TimeSlot; hours: number; wage: number; specialPeriodName?: string }>();
   const workDates = new Set<string>();
 
   for (const shift of shifts) {
-    const isSat = isSaturday(shift.date);
-    const isHolSun = isHolidayOrSunday(shift.date, customHolidays);
-
+    const dayType = getDayType(shift.date, customHolidays);
     workDates.add(shift.date);
 
     for (let h = shift.startHour; h < shift.endHour; h++) {
       if (isBreakHour(h)) continue;
 
-      const category = getSlotCategory(h, isSat, isHolSun);
-      breakdown[category]++;
+      const timeSlot = getTimeSlot(h);
+      const special = findSpecialPeriod(shift.date, timeSlot, specialPeriods);
+      const rate = special ? special.rate : rates[rateKey(dayType, timeSlot)];
 
-      const rate = getHourRate(h, isSat, isHolSun, rates);
-      const wageCategory = category.replace('Hours', 'Wage') as keyof WageBreakdown;
-      (breakdown[wageCategory] as number) += rate;
+      // Key by special period ID + timeSlot, or regular dayType + timeSlot
+      const key = special ? `special:${special.period.id}:${timeSlot}` : `${dayType}:${timeSlot}`;
+      const bucketDayType = special ? 'holiday' : dayType;
 
-      breakdown.totalHours++;
-      breakdown.totalWage += rate;
+      const bucket = buckets.get(key);
+      if (bucket) {
+        bucket.hours++;
+        bucket.wage += rate;
+      } else {
+        buckets.set(key, {
+          dayType: bucketDayType, timeSlot, hours: 1, wage: rate,
+          specialPeriodName: special?.period.name,
+        });
+      }
     }
   }
 
-  breakdown.workDays = workDates.size;
-  return breakdown;
+  const rows: WageBreakdownRow[] = [];
+  let totalHours = 0;
+  let totalWage = 0;
+
+  // Sort order: weekday, saturday, sunday, holiday × morning, afternoon, evening
+  const dayOrder: DayType[] = ['weekday', 'saturday', 'sunday', 'holiday'];
+  const slotOrder: TimeSlot[] = ['morning', 'afternoon', 'evening'];
+
+  // Regular buckets
+  for (const dt of dayOrder) {
+    for (const ts of slotOrder) {
+      const bucket = buckets.get(`${dt}:${ts}`);
+      if (bucket && bucket.hours > 0) {
+        const rate = rates[rateKey(dt, ts)];
+        rows.push({ dayType: dt, timeSlot: ts, hours: bucket.hours, rate, wage: bucket.wage });
+        totalHours += bucket.hours;
+        totalWage += bucket.wage;
+      }
+    }
+  }
+
+  // Special period buckets - each period shown separately with its name
+  for (const [key, bucket] of buckets) {
+    if (!key.startsWith('special:') || bucket.hours === 0) continue;
+    const rate = Math.round(bucket.wage / bucket.hours * 10) / 10;
+    rows.push({
+      dayType: 'holiday', timeSlot: bucket.timeSlot,
+      hours: bucket.hours, rate, wage: bucket.wage,
+      specialPeriodName: bucket.specialPeriodName,
+    });
+    totalHours += bucket.hours;
+    totalWage += bucket.wage;
+  }
+
+  return { rows, totalHours, totalWage, workDays: workDates.size };
 }
 
 export function calculateWeeklyHours(
@@ -110,7 +150,6 @@ export function calculateWeeklyHours(
   const firstDay = new Date(year, month - 1, 1);
   const lastDay = new Date(year, month, 0);
 
-  // Find the Monday of the week containing the 1st
   let weekStart = new Date(firstDay);
   const dayOfWeek = weekStart.getDay();
   const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;

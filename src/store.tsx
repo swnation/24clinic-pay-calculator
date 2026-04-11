@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import type { Doctor, Shift, RatesBySlot, DoctorMonthlyRate } from './types';
+import type { Doctor, Shift, RatesBySlot, DoctorMonthlyRate, SpecialRatePeriod } from './types';
 import { DEFAULT_RATES, DOCTOR_COLORS } from './types';
 import { getKoreanHolidaysForYear } from './utils/holidays';
 
@@ -8,6 +8,7 @@ interface AppState {
   shifts: Shift[];
   defaultRates: RatesBySlot;
   doctorMonthlyRates: DoctorMonthlyRate[];
+  specialRatePeriods: SpecialRatePeriod[];
   customHolidays: string[];
   branchName: string;
 }
@@ -24,6 +25,8 @@ interface AppContextType {
   setDefaultRates: (rates: RatesBySlot) => void;
   setDoctorMonthlyRate: (doctorId: string, month: string, rates: Partial<RatesBySlot>) => void;
   removeDoctorMonthlyRate: (doctorId: string, month: string) => void;
+  addSpecialRatePeriod: (period: Omit<SpecialRatePeriod, 'id'>) => void;
+  removeSpecialRatePeriod: (id: string) => void;
   toggleHoliday: (date: string) => void;
   setCustomHolidays: (dates: string[]) => void;
   setBranchName: (name: string) => void;
@@ -56,6 +59,7 @@ const defaultState: AppState = {
   shifts: [],
   defaultRates: { ...DEFAULT_RATES },
   doctorMonthlyRates: [],
+  specialRatePeriods: [],
   customHolidays: defaultHolidays,
   branchName: '잠실',
 };
@@ -207,6 +211,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  const addSpecialRatePeriod = (period: Omit<SpecialRatePeriod, 'id'>) => {
+    setState(s => ({
+      ...s,
+      specialRatePeriods: [...s.specialRatePeriods, { ...period, id: genId() }],
+    }));
+  };
+
+  const removeSpecialRatePeriod = (id: string) => {
+    setState(s => ({
+      ...s,
+      specialRatePeriods: s.specialRatePeriods.filter(p => p.id !== id),
+    }));
+  };
+
   const toggleHoliday = (date: string) => {
     setState(s => ({
       ...s,
@@ -238,6 +256,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addDoctor, updateDoctor, removeDoctor,
       addShift, updateShift, removeShift, bulkImport,
       setDefaultRates, setDoctorMonthlyRate, removeDoctorMonthlyRate,
+      addSpecialRatePeriod, removeSpecialRatePeriod,
       toggleHoliday, setCustomHolidays,
       setBranchName,
       getShiftsForMonth, getShiftsForDoctor,
