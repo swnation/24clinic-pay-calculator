@@ -389,7 +389,7 @@ export default function Settings() {
           <button
             onClick={() => {
               const data = JSON.stringify(
-                { doctors: state.doctors, shifts: state.shifts, defaultRates: state.defaultRates, customHolidays: state.customHolidays, branchName: state.branchName },
+                { doctors: state.doctors, shifts: state.shifts, defaultRates: state.defaultRates, branchMonthlyRates: state.branchMonthlyRates, specialRatePeriods: state.specialRatePeriods, customHolidays: state.customHolidays, branchName: state.branchName },
                 null, 2
               );
               const blob = new Blob([data], { type: 'application/json' });

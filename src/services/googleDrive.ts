@@ -113,18 +113,27 @@ export async function saveToDrive(data: Record<string, unknown>): Promise<boolea
     );
     return res.ok;
   } else {
-    // Create new file
+    // Create new file (multipart/related format required by Drive API)
     const metadata = { name: DATA_FILENAME, parents: ['appDataFolder'] };
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', new Blob([body], { type: 'application/json' }));
+    const boundary = '-------24clinic_boundary';
+    const multipartBody =
+      `--${boundary}\r\n` +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) +
+      `\r\n--${boundary}\r\n` +
+      'Content-Type: application/json\r\n\r\n' +
+      body +
+      `\r\n--${boundary}--`;
 
     const res = await fetch(
       'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
       {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
-        body: form,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body: multipartBody,
       }
     );
     return res.ok;
