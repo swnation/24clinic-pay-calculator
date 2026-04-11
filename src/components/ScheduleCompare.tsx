@@ -31,8 +31,9 @@ function computeDiff(
   storedShifts: Shift[],
   getDoctorName: (id: string) => string,
 ): DiffResult {
+  const doctorMap = new Map(storedShifts.map(s => [s.doctorId, getDoctorName(s.doctorId)]));
   const pastedKeys = new Set(pastedShifts.map(s => shiftKey(s.doctorName, s.date, s.startHour, s.endHour, s.room)));
-  const storedKeys = new Set(storedShifts.map(s => shiftKey(getDoctorName(s.doctorId), s.date, s.startHour, s.endHour, s.room)));
+  const storedKeys = new Set(storedShifts.map(s => shiftKey(doctorMap.get(s.doctorId) || '?', s.date, s.startHour, s.endHour, s.room)));
 
   let matching = 0;
   const onlyInPasted: DiffResult['onlyInPasted'] = [];
@@ -48,9 +49,10 @@ function computeDiff(
   }
 
   for (const s of storedShifts) {
-    const key = shiftKey(getDoctorName(s.doctorId), s.date, s.startHour, s.endHour, s.room);
+    const name = doctorMap.get(s.doctorId) || '?';
+    const key = shiftKey(name, s.date, s.startHour, s.endHour, s.room);
     if (!pastedKeys.has(key)) {
-      onlyInStored.push({ date: s.date, name: getDoctorName(s.doctorId), start: s.startHour, end: s.endHour, room: s.room });
+      onlyInStored.push({ date: s.date, name, start: s.startHour, end: s.endHour, room: s.room });
     }
   }
 
