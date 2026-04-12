@@ -145,21 +145,18 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 {holiday && <span className="text-[7px] text-red-500">{holiday}</span>}
               </div>
 
-              {/* Fixed 3 rows: morning / afternoon / evening */}
-              <div className="flex flex-col gap-0.5">
-                {timeSlots.map(slot => {
+              {/* Fixed 3 rows: morning / afternoon / evening with dotted lines */}
+              <div className="flex flex-col">
+                {timeSlots.map((slot, slotIdx) => {
                   const r1 = dayData?.[slot].room1 || [];
                   const r2 = dayData?.[slot].room2 || [];
-                  if (r1.length === 0 && r2.length === 0) {
-                    return <div key={slot} className="h-[24px]" />;
-                  }
                   return (
-                    <div key={slot} className="flex gap-0.5 min-h-[24px]">
-                      <div className={hasRoom2 ? 'flex-1' : 'flex-1'}>
+                    <div key={slot} className={`flex min-h-[24px] ${slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
+                      <div className="flex-1 py-0.5 px-0.5">
                         {r1.map(renderShiftBadge)}
                       </div>
                       {hasRoom2 && (
-                        <div className="flex-1">
+                        <div className="flex-1 border-l border-dashed border-gray-300 py-0.5 px-0.5">
                           {r2.map(renderShiftBadge)}
                         </div>
                       )}

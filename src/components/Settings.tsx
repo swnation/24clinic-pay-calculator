@@ -165,7 +165,7 @@ export default function Settings() {
                     onKeyDown={e => e.key === 'Enter' && saveEditing()}
                   />
                   {/* Quick color palette */}
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap">
                     {DOCTOR_COLORS.map(c => (
                       <button
                         key={c}
@@ -175,6 +175,23 @@ export default function Settings() {
                       />
                     ))}
                   </div>
+                  {/* EyeDropper - pick color from screen */}
+                  {'EyeDropper' in window && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          // @ts-expect-error EyeDropper API
+                          const dropper = new window.EyeDropper();
+                          const result = await dropper.open();
+                          setEditColor(result.sRGBHex);
+                        } catch { /* cancelled */ }
+                      }}
+                      className="text-xs bg-gray-100 px-2 py-1 rounded active:bg-gray-200"
+                      title="화면에서 색상 추출"
+                    >
+                      스포이드
+                    </button>
+                  )}
                   <button onClick={saveEditing} className="text-sm text-blue-600 font-medium">저장</button>
                   <button onClick={() => setEditingDoctor(null)} className="text-sm text-gray-500">취소</button>
                 </>

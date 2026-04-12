@@ -60,15 +60,37 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
     return days;
   }, [year, month]);
 
-  const shiftsByDate = useMemo(() => {
-    const map = new Map<string, Shift[]>();
+  type TimeSlotKey = 'morning' | 'afternoon' | 'evening';
+
+  const getTimeSlotKey = (startHour: number): TimeSlotKey => {
+    if (startHour < 14) return 'morning';
+    if (startHour < 19) return 'afternoon';
+    return 'evening';
+  };
+
+  const timeSlots: TimeSlotKey[] = ['morning', 'afternoon', 'evening'];
+
+  // Build structured data: date -> { morning/afternoon/evening } -> { room1, room2 }
+  const structuredShifts = useMemo(() => {
+    const map = new Map<string, Record<TimeSlotKey, { room1: Shift[]; room2: Shift[] }>>();
     for (const s of shifts) {
-      const key = s.date;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(s);
+      if (!map.has(s.date)) {
+        map.set(s.date, {
+          morning: { room1: [], room2: [] },
+          afternoon: { room1: [], room2: [] },
+          evening: { room1: [], room2: [] },
+        });
+      }
+      const dayData = map.get(s.date)!;
+      const slot = getTimeSlotKey(s.startHour);
+      if (s.room === 1) dayData[slot].room1.push(s);
+      else dayData[slot].room2.push(s);
     }
     return map;
   }, [shifts]);
+
+  // Month-level Room 2 detection for consistent grid
+  const monthHasRoom2 = useMemo(() => shifts.some(s => s.room === 2), [shifts]);
 
   const getDoctorName = (id: string) => state.doctors.find(d => d.id === id)?.name || '?';
   const getDoctorColor = (id: string) => state.doctors.find(d => d.id === id)?.color || '#E0E0E0';
@@ -169,9 +191,7 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
             const holiday = getHolidayName(dateStr);
             const isToday = dateStr === todayStr;
 
-            const dayShifts = shiftsByDate.get(dateStr) || [];
-            const room1 = dayShifts.filter(s => s.room === 1).sort((a, b) => a.startHour - b.startHour);
-            const room2 = dayShifts.filter(s => s.room === 2).sort((a, b) => a.startHour - b.startHour);
+            const dayData = structuredShifts.get(dateStr);
 
             return (
               <div
@@ -191,36 +211,47 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
                   )}
                 </div>
 
-                {/* Shifts: two columns for rooms */}
-                <div className="flex gap-0.5">
-                  {/* Room 1 */}
-                  <div className="flex-1 space-y-0.5">
-                    {room1.map(s => (
-                      <ShiftBadge
-                        key={s.id}
-                        shift={s}
-                        doctorName={getDoctorName(s.doctorId)}
-                        doctorColor={getDoctorColor(s.doctorId)}
-                        filtered={isFiltered(s.doctorId)}
-                        onClick={(e) => { e.stopPropagation(); setEditShift(s); }}
-                      />
-                    ))}
-                  </div>
-                  {/* Room 2 */}
-                  {room2.length > 0 && (
-                    <div className="flex-1 space-y-0.5">
-                      {room2.map(s => (
-                        <ShiftBadge
-                          key={s.id}
-                          shift={s}
-                          doctorName={getDoctorName(s.doctorId)}
-                          doctorColor={getDoctorColor(s.doctorId)}
-                          filtered={isFiltered(s.doctorId)}
-                          onClick={(e) => { e.stopPropagation(); setEditShift(s); }}
-                        />
-                      ))}
-                    </div>
-                  )}
+                {/* Fixed 3-row × 2-column grid: morning / afternoon / evening × Room 1 / Room 2 */}
+                <div className="flex flex-col">
+                  {timeSlots.map((slot, slotIdx) => {
+                    const r1 = dayData?.[slot].room1 || [];
+                    const r2 = dayData?.[slot].room2 || [];
+                    return (
+                      <div
+                        key={slot}
+                        className={`flex min-h-[20px] ${slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}
+                      >
+                        {/* Room 1 */}
+                        <div className="flex-1 py-[1px]">
+                          {r1.map(s => (
+                            <ShiftBadge
+                              key={s.id}
+                              shift={s}
+                              doctorName={getDoctorName(s.doctorId)}
+                              doctorColor={getDoctorColor(s.doctorId)}
+                              filtered={isFiltered(s.doctorId)}
+                              onClick={(e) => { e.stopPropagation(); setEditShift(s); }}
+                            />
+                          ))}
+                        </div>
+                        {/* Room 2 */}
+                        {monthHasRoom2 && (
+                          <div className="flex-1 py-[1px] border-l border-dashed border-gray-300">
+                            {r2.map(s => (
+                              <ShiftBadge
+                                key={s.id}
+                                shift={s}
+                                doctorName={getDoctorName(s.doctorId)}
+                                doctorColor={getDoctorColor(s.doctorId)}
+                                filtered={isFiltered(s.doctorId)}
+                                onClick={(e) => { e.stopPropagation(); setEditShift(s); }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
