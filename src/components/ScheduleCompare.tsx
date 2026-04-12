@@ -294,14 +294,34 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
 
       {/* Original screenshot mode */}
       {viewMode === 'original' && (
-        <div>
+        <div
+          onPaste={(e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (const item of items) {
+              if (item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (!file) continue;
+                const reader = new FileReader();
+                reader.onload = () => setImage(reader.result as string);
+                reader.readAsDataURL(file);
+                e.preventDefault();
+                break;
+              }
+            }
+          }}
+          tabIndex={0}
+        >
           {!image ? (
-            <div className="flex flex-col items-center gap-4 py-8">
-              <p className="text-sm text-gray-500">스크린샷을 업로드하세요.</p>
+            <div className="flex flex-col items-center gap-4 py-8 border-2 border-dashed border-gray-300 rounded-lg mx-2">
+              <p className="text-sm text-gray-500 text-center">
+                스크린샷을 업로드하거나<br />복사 후 여기에 붙여넣기 하세요.
+              </p>
               <button onClick={() => fileRef.current?.click()}
                 className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium active:bg-blue-700">
-                스크린샷 업로드
+                파일 선택
               </button>
+              <p className="text-xs text-gray-400">또는 Ctrl+V / 길게 눌러 붙여넣기</p>
             </div>
           ) : (
             <div>
