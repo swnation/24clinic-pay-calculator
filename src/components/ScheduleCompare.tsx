@@ -49,8 +49,9 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        e.preventDefault();
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
         if (!image) return;
+        e.preventDefault();
         const modes: typeof viewMode[] = ['screenshot', 'parsed', 'overlay'];
         const idx = modes.indexOf(viewMode);
         const next = e.key === 'ArrowRight'
@@ -94,6 +95,9 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     return map;
   }, [shifts]);
 
+  // Month-level Room 2 detection for consistent grid
+  const monthHasRoom2 = useMemo(() => shifts.some(s => s.room === 2), [shifts]);
+
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
   const timeSlots: TimeSlotKey[] = ['morning', 'afternoon', 'evening'];
 
@@ -131,7 +135,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           const isSat = isSaturday(dateStr);
           const holiday = getHolidayName(dateStr);
           const dayData = structuredShifts.get(dateStr);
-          const hasRoom2 = dayData && timeSlots.some(ts => dayData[ts].room2.length > 0);
+          const hasRoom2 = monthHasRoom2;
 
           return (
             <div key={dateStr} className="border-b border-r border-gray-300 bg-white h-[110px] p-0.5">
@@ -232,7 +236,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 const file = item.getAsFile();
                 if (file) {
                   const reader = new FileReader();
-                  reader.onload = () => { setImage(reader.result as string); };
+                  reader.onload = () => { setImage(reader.result as string); setViewMode('screenshot'); };
                   reader.readAsDataURL(file);
                 }
                 break;
