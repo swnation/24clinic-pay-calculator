@@ -214,8 +214,8 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
                 {/* Fixed 3-row × 2-column grid: morning / afternoon / evening × Room 1 / Room 2 */}
                 <div className="flex flex-col">
                   {timeSlots.map((slot, slotIdx) => {
-                    const r1 = dayData?.[slot].room1 || [];
-                    const r2 = dayData?.[slot].room2 || [];
+                    const r1 = dayData?.[slot]?.room1 || [];
+                    const r2 = dayData?.[slot]?.room2 || [];
                     return (
                       <div
                         key={slot}

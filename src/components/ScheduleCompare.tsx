@@ -148,8 +148,8 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               {/* Fixed 3 rows: morning / afternoon / evening with dotted lines */}
               <div className="flex flex-col">
                 {timeSlots.map((slot, slotIdx) => {
-                  const r1 = dayData?.[slot].room1 || [];
-                  const r2 = dayData?.[slot].room2 || [];
+                  const r1 = dayData?.[slot]?.room1 || [];
+                  const r2 = dayData?.[slot]?.room2 || [];
                   return (
                     <div key={slot} className={`flex min-h-[24px] ${slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
                       <div className="flex-1 py-0.5 px-0.5">
