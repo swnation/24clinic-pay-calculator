@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import type { Doctor, Shift, RatesBySlot, BranchMonthlyRate, SpecialRatePeriod } from './types';
 import { DEFAULT_RATES, DOCTOR_COLORS } from './types';
 import { getKoreanHolidaysForYear } from './utils/holidays';
@@ -134,6 +134,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     saveState(state);
+  }, [state]);
+
+  // Auto-save to Google Drive (debounced)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLoadDone = useRef(false);
+
+  useEffect(() => {
+    if (!isSignedIn() || !initialLoadDone.current) return;
+    // Debounce: save 3 seconds after last change
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      setCloudSyncStatus('saving');
+      saveToDrive(state as unknown as Record<string, unknown>)
+        .then(ok => {
+          setCloudSyncStatus(ok ? 'success' : 'error');
+          setTimeout(() => setCloudSyncStatus('idle'), 2000);
+        })
+        .catch(() => {
+          setCloudSyncStatus('error');
+          setTimeout(() => setCloudSyncStatus('idle'), 2000);
+        });
+    }, 3000);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [state]);
 
   const addDoctor = (name: string): Doctor => {
@@ -302,6 +325,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       await signIn(googleClientId);
       setIsGoogleSignedIn(true);
+      // Auto-load from Drive on sign-in
+      setCloudSyncStatus('loading');
+      const data = await loadFromDrive();
+      if (data) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        initialLoadDone.current = true;
+        window.location.reload();
+        return;
+      }
+      // No cloud data yet - mark as ready for auto-save
+      initialLoadDone.current = true;
+      setCloudSyncStatus('idle');
     } catch {
       setIsGoogleSignedIn(false);
     }
