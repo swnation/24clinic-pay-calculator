@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import type { Doctor, Shift, RatesBySlot, BranchMonthlyRate, SpecialRatePeriod } from './types';
 import { DEFAULT_RATES, DOCTOR_COLORS } from './types';
 import { getKoreanHolidaysForYear } from './utils/holidays';
@@ -132,8 +132,42 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(loadState);
 
+  // Google Drive sync state (declared early for auto-save useEffect)
+  const CLIENT_ID_KEY = '24clinic-google-client-id';
+  const [googleClientId, setGoogleClientIdState] = useState(() => localStorage.getItem(CLIENT_ID_KEY) || '');
+  const [isGoogleSignedInState, setIsGoogleSignedIn] = useState(false);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'saving' | 'loading' | 'success' | 'error'>('idle');
+
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLoadDone = useRef(false);
+
   useEffect(() => {
     saveState(state);
+  }, [state]);
+
+  // Auto-save to Google Drive (debounced)
+  useEffect(() => {
+    if (!isSignedIn() || !initialLoadDone.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      setCloudSyncStatus('saving');
+      saveToDrive(state as unknown as Record<string, unknown>)
+        .then(ok => {
+          setCloudSyncStatus(ok ? 'success' : 'error');
+          if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+          statusTimerRef.current = setTimeout(() => setCloudSyncStatus('idle'), 2000);
+        })
+        .catch(() => {
+          setCloudSyncStatus('error');
+          if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+          statusTimerRef.current = setTimeout(() => setCloudSyncStatus('idle'), 2000);
+        });
+    }, 3000);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+    };
   }, [state]);
 
   const addDoctor = (name: string): Doctor => {
@@ -286,12 +320,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return state.shifts.filter(s => s.doctorId === doctorId && s.date.startsWith(month));
   };
 
-  // Google Drive sync
-  const CLIENT_ID_KEY = '24clinic-google-client-id';
-  const [googleClientId, setGoogleClientIdState] = useState(() => localStorage.getItem(CLIENT_ID_KEY) || '');
-  const [isGoogleSignedInState, setIsGoogleSignedIn] = useState(false);
-  const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'saving' | 'loading' | 'success' | 'error'>('idle');
-
+  // Google Drive sync actions
   const setGoogleClientId = (id: string) => {
     localStorage.setItem(CLIENT_ID_KEY, id);
     setGoogleClientIdState(id);
@@ -302,6 +331,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       await signIn(googleClientId);
       setIsGoogleSignedIn(true);
+      // Auto-load from Drive on sign-in
+      setCloudSyncStatus('loading');
+      try {
+        const data = await loadFromDrive();
+        if (data) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          setState(loadState());
+          initialLoadDone.current = true;
+          setCloudSyncStatus('success');
+          if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+          statusTimerRef.current = setTimeout(() => setCloudSyncStatus('idle'), 2000);
+          return;
+        }
+        // No cloud data yet - mark as ready for auto-save
+        initialLoadDone.current = true;
+        setCloudSyncStatus('idle');
+      } catch {
+        // Load failed - do NOT set initialLoadDone to prevent overwriting cloud data
+        setCloudSyncStatus('error');
+        if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+        statusTimerRef.current = setTimeout(() => setCloudSyncStatus('idle'), 2000);
+      }
     } catch {
       setIsGoogleSignedIn(false);
     }
@@ -338,7 +389,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return false;
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      window.location.reload();
+      setState(loadState());
+      setCloudSyncStatus('success');
+      setTimeout(() => setCloudSyncStatus('idle'), 2000);
       return true;
     } catch {
       setCloudSyncStatus('error');
