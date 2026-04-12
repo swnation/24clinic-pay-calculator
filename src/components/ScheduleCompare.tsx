@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import type { Shift } from '../types';
 import { useAppStore } from '../store';
 import { isHolidayOrSunday, isSaturday, getHolidayName } from '../utils/holidays';
@@ -16,11 +16,9 @@ function pad(n: number): string {
 export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const { state, getShiftsForMonth } = useAppStore();
   const [image, setImage] = useState<string | null>(null);
-  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'screenshot' | 'parsed'>('screenshot');
   const fileRef = useRef<HTMLInputElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
 
   const monthStr = `${year}-${pad(month)}`;
   const shifts = getShiftsForMonth(monthStr);
@@ -42,16 +40,6 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     reader.onload = () => { setImage(reader.result as string); setViewMode('screenshot'); };
     reader.readAsDataURL(file);
   };
-
-  // Capture screenshot dimensions after it renders
-  const onImageLoad = useCallback(() => {
-    if (imgRef.current) {
-      setImageSize({
-        width: imgRef.current.clientWidth,
-        height: imgRef.current.clientHeight,
-      });
-    }
-  }, []);
 
   const calendarDays = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1);
@@ -209,11 +197,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               <div className="flex justify-end gap-1.5 mb-2">
                 <button onClick={() => fileRef.current?.click()}
                   className="px-2 py-1 text-[11px] bg-gray-100 rounded active:bg-gray-200">교체</button>
-                <button onClick={() => { setImage(null); setImageSize(null); }}
+                <button onClick={() => setImage(null)}
                   className="px-2 py-1 text-[11px] bg-red-50 text-red-600 rounded active:bg-red-100">삭제</button>
               </div>
               <div className="border border-gray-300 rounded-lg overflow-auto bg-gray-50">
-                <img ref={imgRef} src={image} alt="원본 스케줄" className="w-full" onLoad={onImageLoad} />
+                <img src={image} alt="원본 스케줄" className="w-full" />
               </div>
             </div>
           )}
@@ -226,7 +214,6 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
         <div>
           <div
             className="border border-gray-300 rounded-lg overflow-auto"
-            style={imageSize ? { width: imageSize.width, maxWidth: '100%' } : undefined}
           >
             {shifts.length > 0 ? fullCalendar : (
               <p className="text-sm text-gray-500 text-center py-8">
