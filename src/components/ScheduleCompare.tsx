@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import type { Shift } from '../types';
 import { useAppStore } from '../store';
 import { isHolidayOrSunday, isSaturday, getHolidayName } from '../utils/holidays';
@@ -13,12 +13,22 @@ function pad(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
+type TimeSlotKey = 'morning' | 'afternoon' | 'evening';
+
+function getTimeSlotKey(startHour: number): TimeSlotKey {
+  if (startHour < 14) return 'morning';
+  if (startHour < 19) return 'afternoon';
+  return 'evening';
+}
+
 export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const { state, getShiftsForMonth } = useAppStore();
   const [image, setImage] = useState<string | null>(null);
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'screenshot' | 'parsed'>('screenshot');
+  const [viewMode, setViewMode] = useState<'screenshot' | 'parsed' | 'overlay'>('screenshot');
+  const [overlayOpacity, setOverlayOpacity] = useState(0.5);
   const fileRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const monthStr = `${year}-${pad(month)}`;
   const shifts = getShiftsForMonth(monthStr);
@@ -35,11 +45,23 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     reader.readAsDataURL(file);
   };
 
-  const handlePasteImage = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => { setImage(reader.result as string); setViewMode('screenshot'); };
-    reader.readAsDataURL(file);
-  };
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (!image) return;
+        const modes: typeof viewMode[] = ['screenshot', 'parsed', 'overlay'];
+        const idx = modes.indexOf(viewMode);
+        const next = e.key === 'ArrowRight'
+          ? modes[(idx + 1) % modes.length]
+          : modes[(idx - 1 + modes.length) % modes.length];
+        setViewMode(next);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [viewMode, image]);
 
   const calendarDays = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1);
@@ -53,74 +75,103 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     return days;
   }, [year, month]);
 
-  const shiftsByDate = useMemo(() => {
-    const map = new Map<string, Shift[]>();
+  // Build structured data: date -> { morning/afternoon/evening } -> { room1, room2 }
+  const structuredShifts = useMemo(() => {
+    const map = new Map<string, Record<TimeSlotKey, { room1: Shift[]; room2: Shift[] }>>();
     for (const s of shifts) {
-      if (!map.has(s.date)) map.set(s.date, []);
-      map.get(s.date)!.push(s);
+      if (!map.has(s.date)) {
+        map.set(s.date, {
+          morning: { room1: [], room2: [] },
+          afternoon: { room1: [], room2: [] },
+          evening: { room1: [], room2: [] },
+        });
+      }
+      const dayData = map.get(s.date)!;
+      const slot = getTimeSlotKey(s.startHour);
+      if (s.room === 1) dayData[slot].room1.push(s);
+      else dayData[slot].room2.push(s);
     }
     return map;
   }, [shifts]);
 
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+  const timeSlots: TimeSlotKey[] = ['morning', 'afternoon', 'evening'];
 
-  const fullCalendar = (
-    <div className="grid grid-cols-7 border-t border-l border-gray-400">
-      {dayNames.map((name, i) => (
-        <div key={name} className={`text-center text-xs font-bold py-1.5 border-b border-r border-gray-400 ${
-          i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
-        }`}>{name}</div>
-      ))}
-      {calendarDays.map((day, idx) => {
-        if (day === null) {
-          return <div key={`e-${idx}`} className="border-b border-r border-gray-300 bg-white min-h-[80px]" />;
-        }
-        const dateStr = `${year}-${pad(month)}-${pad(day)}`;
-        const isHolSun = isHolidayOrSunday(dateStr, state.customHolidays);
-        const isSat = isSaturday(dateStr);
-        const holiday = getHolidayName(dateStr);
-        const dayShifts = shiftsByDate.get(dateStr) || [];
-        const room1 = dayShifts.filter(s => s.room === 1).sort((a, b) => a.startHour - b.startHour);
-        const room2 = dayShifts.filter(s => s.room === 2).sort((a, b) => a.startHour - b.startHour);
+  const renderShiftBadge = (s: Shift) => {
+    const dimmed = filterDoctor !== 'all' && s.doctorId !== filterDoctor;
+    return (
+      <div
+        key={s.id}
+        className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[2px] rounded-sm whitespace-nowrap overflow-hidden ${dimmed ? 'opacity-15' : ''}`}
+        style={{ backgroundColor: getDoctorColor(s.doctorId) }}
+      >
+        <span className="font-medium">{getDoctorName(s.doctorId)}</span>
+        <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
+      </div>
+    );
+  };
 
-        return (
-          <div key={dateStr} className="border-b border-r border-gray-300 bg-white min-h-[80px] p-1">
-            <div className="flex items-baseline gap-1 mb-0.5">
-              <span className={`font-bold text-xs ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
-              {holiday && <span className="text-[8px] text-red-500 font-medium">{holiday}</span>}
-            </div>
-            <div className="flex gap-0.5">
-              <div className="flex-1 space-y-0.5">
-                {room1.map(s => (
-                  <div key={s.id} className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[3px] rounded-sm whitespace-nowrap overflow-hidden ${
-                    filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''
-                  }`} style={{ backgroundColor: getDoctorColor(s.doctorId) }}>
-                    <span className="font-medium">{getDoctorName(s.doctorId)}</span>
-                    <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
-                  </div>
-                ))}
+  const fixedGridCalendar = (
+    <div className="overflow-x-auto">
+      <div className="grid grid-cols-7 border-t border-l border-gray-400 min-w-[840px]">
+        {/* Day headers */}
+        {dayNames.map((name, i) => (
+          <div key={name} className={`text-center text-xs font-bold py-1.5 border-b border-r border-gray-400 ${
+            i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
+          }`}>{name}</div>
+        ))}
+
+        {/* Day cells with fixed 3-row × 2-column grid */}
+        {calendarDays.map((day, idx) => {
+          if (day === null) {
+            return <div key={`e-${idx}`} className="border-b border-r border-gray-300 bg-white h-[110px]" />;
+          }
+          const dateStr = `${year}-${pad(month)}-${pad(day)}`;
+          const isHolSun = isHolidayOrSunday(dateStr, state.customHolidays);
+          const isSat = isSaturday(dateStr);
+          const holiday = getHolidayName(dateStr);
+          const dayData = structuredShifts.get(dateStr);
+          const hasRoom2 = dayData && timeSlots.some(ts => dayData[ts].room2.length > 0);
+
+          return (
+            <div key={dateStr} className="border-b border-r border-gray-300 bg-white h-[110px] p-0.5">
+              {/* Date number */}
+              <div className="flex items-baseline gap-0.5 mb-0.5">
+                <span className={`font-bold text-[11px] ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
+                {holiday && <span className="text-[7px] text-red-500">{holiday}</span>}
               </div>
-              {room2.length > 0 && (
-                <div className="flex-1 space-y-0.5">
-                  {room2.map(s => (
-                    <div key={s.id} className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[3px] rounded-sm whitespace-nowrap overflow-hidden ${
-                      filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''
-                    }`} style={{ backgroundColor: getDoctorColor(s.doctorId) }}>
-                      <span className="font-medium">{getDoctorName(s.doctorId)}</span>
-                      <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
+
+              {/* Fixed 3 rows: morning / afternoon / evening */}
+              <div className="flex flex-col gap-0.5">
+                {timeSlots.map(slot => {
+                  const r1 = dayData?.[slot].room1 || [];
+                  const r2 = dayData?.[slot].room2 || [];
+                  if (r1.length === 0 && r2.length === 0) {
+                    return <div key={slot} className="h-[24px]" />;
+                  }
+                  return (
+                    <div key={slot} className="flex gap-0.5 min-h-[24px]">
+                      <div className={hasRoom2 ? 'flex-1' : 'flex-1'}>
+                        {r1.map(renderShiftBadge)}
+                      </div>
+                      {hasRoom2 && (
+                        <div className="flex-1">
+                          {r2.map(renderShiftBadge)}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 
   return (
-    <div>
+    <div ref={containerRef}>
       {/* Month navigation */}
       <div className="flex items-center justify-center gap-6 mb-3">
         <button onClick={() => { if (month === 1) onMonthChange(year - 1, 12); else onMonthChange(year, month - 1); }}
@@ -130,20 +181,26 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none">&gt;</button>
       </div>
 
-      {/* Toggle: 스크린샷 / 파싱결과 */}
-      <div className="flex items-center gap-1 mb-3 bg-gray-100 rounded-lg p-1 max-w-xs mx-auto">
+      {/* Mode toggle */}
+      <div className="flex items-center gap-1 mb-3 bg-gray-100 rounded-lg p-1 max-w-sm mx-auto">
         <button onClick={() => setViewMode('screenshot')}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${viewMode === 'screenshot' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
+          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${viewMode === 'screenshot' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
           스크린샷
         </button>
         <button onClick={() => setViewMode('parsed')}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${viewMode === 'parsed' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
+          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${viewMode === 'parsed' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
           파싱결과 ({shifts.length})
         </button>
+        {image && (
+          <button onClick={() => setViewMode('overlay')}
+            className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${viewMode === 'overlay' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
+            겹치기
+          </button>
+        )}
       </div>
 
-      {/* Doctor filter (always visible when image exists) */}
-      {image && (
+      {/* Doctor filter */}
+      {(viewMode === 'parsed' || viewMode === 'overlay') && (
         <div className="flex flex-wrap gap-1.5 mb-3 justify-center">
           <button onClick={() => setFilterDoctor('all')}
             className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
@@ -173,7 +230,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               if (item.type.startsWith('image/')) {
                 e.preventDefault();
                 const file = item.getAsFile();
-                if (file) handlePasteImage(file);
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = () => { setImage(reader.result as string); };
+                  reader.readAsDataURL(file);
+                }
                 break;
               }
             }
@@ -209,23 +270,45 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
         </div>
       )}
 
-      {/* Parsed data mode - match screenshot size */}
+      {/* Parsed data mode - fixed grid */}
       {viewMode === 'parsed' && (
+        <div className="border border-gray-300 rounded-lg overflow-auto">
+          {shifts.length > 0 ? fixedGridCalendar : (
+            <p className="text-sm text-gray-500 text-center py-8">
+              이 달에 파싱된 근무가 없습니다.<br />스케줄 탭에서 먼저 붙여넣기 해주세요.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Overlay mode - screenshot + parsed layered */}
+      {viewMode === 'overlay' && image && (
         <div>
-          <div
-            className="border border-gray-300 rounded-lg overflow-auto"
-          >
-            {shifts.length > 0 ? fullCalendar : (
-              <p className="text-sm text-gray-500 text-center py-8">
-                이 달에 파싱된 근무가 없습니다.<br />스케줄 탭에서 먼저 붙여넣기 해주세요.
-              </p>
-            )}
+          <div className="flex items-center gap-3 mb-3 px-2">
+            <span className="text-xs text-gray-500 whitespace-nowrap">원본</span>
+            <input
+              type="range" min="0" max="1" step="0.05"
+              value={overlayOpacity}
+              onChange={e => setOverlayOpacity(Number(e.target.value))}
+              className="flex-1 h-2 accent-blue-600"
+            />
+            <span className="text-xs text-gray-500 whitespace-nowrap">파싱</span>
+          </div>
+          <div className="relative border border-gray-300 rounded-lg overflow-auto">
+            {/* Screenshot layer */}
+            <div style={{ opacity: 1 - overlayOpacity }}>
+              <img src={image} alt="원본" className="w-full" />
+            </div>
+            {/* Parsed layer */}
+            <div className="absolute inset-0" style={{ opacity: overlayOpacity }}>
+              {fixedGridCalendar}
+            </div>
           </div>
         </div>
       )}
 
       <p className="text-xs text-gray-400 text-center mt-3">
-        스크린샷 ↔ 파싱결과를 전환하면서 이름+시간으로 비교하세요.
+        {image ? '← → 키보드로 전환 / 겹치기 모드에서 슬라이더로 불투명도 조절' : '스크린샷을 먼저 업로드하세요.'}
       </p>
     </div>
   );
