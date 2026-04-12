@@ -145,7 +145,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
         </button>
         <button onClick={() => setViewMode('parsed')}
           className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${viewMode === 'parsed' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
-          파싱결과
+          파싱결과 ({shifts.length})
         </button>
       </div>
 
@@ -156,7 +156,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
             <div className="text-center py-8">
               <p className="text-sm text-gray-500 mb-3">사이트 임베드가 차단되었습니다.</p>
               <div className="flex gap-2 justify-center">
-                <a href="http://24clinic.kr/schedule.html" target="_blank" rel="noopener noreferrer"
+                <a href="https://24clinic.kr/schedule.html" target="_blank" rel="noopener noreferrer"
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
                   새 탭에서 열기
                 </a>
@@ -167,24 +167,17 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               </div>
             </div>
           ) : (
-            <div className="border border-gray-300 rounded-lg overflow-hidden" style={{ height: '70vh' }}>
-              <iframe
-                src="http://24clinic.kr/schedule.html"
-                className="w-full h-full border-0"
-                onError={() => setIframeBlocked(true)}
-                onLoad={(e) => {
-                  // Check if iframe loaded successfully (some blocks show blank)
-                  try {
-                    const iframe = e.target as HTMLIFrameElement;
-                    // Can't access cross-origin content, but if it loaded, it's fine
-                    if (!iframe.contentDocument && !iframe.contentWindow) {
-                      // Might be blocked
-                    }
-                  } catch {
-                    // Cross-origin is expected, iframe loaded successfully
-                  }
-                }}
-              />
+            <div>
+              <div className="border border-gray-300 rounded-lg overflow-hidden" style={{ height: '70vh' }}>
+                <iframe
+                  src="https://24clinic.kr/schedule.html"
+                  className="w-full h-full border-0"
+                />
+              </div>
+              <p className="text-xs text-gray-400 text-center mt-2">
+                사이트가 표시되지 않으면
+                <button onClick={() => setIframeBlocked(true)} className="text-blue-500 underline ml-1">여기를 터치</button>
+              </p>
             </div>
           )}
         </div>
