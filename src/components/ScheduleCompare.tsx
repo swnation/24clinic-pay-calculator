@@ -17,7 +17,8 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const { state, getShiftsForMonth } = useAppStore();
   const [image, setImage] = useState<string | null>(null);
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'original' | 'parsed'>('original');
+  const [viewMode, setViewMode] = useState<'site' | 'screenshot' | 'parsed'>('site');
+  const [iframeBlocked, setIframeBlocked] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const monthStr = `${year}-${pad(month)}`;
@@ -31,13 +32,13 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => { setImage(reader.result as string); setViewMode('original'); };
+    reader.onload = () => { setImage(reader.result as string); setViewMode('screenshot'); };
     reader.readAsDataURL(file);
   };
 
   const handlePasteImage = (file: File) => {
     const reader = new FileReader();
-    reader.onload = () => { setImage(reader.result as string); setViewMode('original'); };
+    reader.onload = () => { setImage(reader.result as string); setViewMode('screenshot'); };
     reader.readAsDataURL(file);
   };
 
@@ -132,20 +133,65 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none">&gt;</button>
       </div>
 
-      {/* Toggle: 원본 / 파싱결과 */}
-      <div className="flex items-center gap-1 mb-3 bg-gray-100 rounded-lg p-1 max-w-xs mx-auto">
-        <button onClick={() => setViewMode('original')}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${viewMode === 'original' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
-          원본
+      {/* Toggle: 사이트 / 스크린샷 / 파싱결과 */}
+      <div className="flex items-center gap-1 mb-3 bg-gray-100 rounded-lg p-1 max-w-sm mx-auto">
+        <button onClick={() => setViewMode('site')}
+          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${viewMode === 'site' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
+          사이트
+        </button>
+        <button onClick={() => setViewMode('screenshot')}
+          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${viewMode === 'screenshot' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
+          스크린샷
         </button>
         <button onClick={() => setViewMode('parsed')}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${viewMode === 'parsed' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
-          파싱결과 ({shifts.length})
+          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${viewMode === 'parsed' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
+          파싱결과
         </button>
       </div>
 
-      {/* Original screenshot mode */}
-      {viewMode === 'original' && (
+      {/* Live site iframe */}
+      {viewMode === 'site' && (
+        <div>
+          {iframeBlocked ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-gray-500 mb-3">사이트 임베드가 차단되었습니다.</p>
+              <div className="flex gap-2 justify-center">
+                <a href="http://24clinic.kr/schedule.html" target="_blank" rel="noopener noreferrer"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  새 탭에서 열기
+                </a>
+                <button onClick={() => setViewMode('screenshot')}
+                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium">
+                  스크린샷으로 비교
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="border border-gray-300 rounded-lg overflow-hidden" style={{ height: '70vh' }}>
+              <iframe
+                src="http://24clinic.kr/schedule.html"
+                className="w-full h-full border-0"
+                onError={() => setIframeBlocked(true)}
+                onLoad={(e) => {
+                  // Check if iframe loaded successfully (some blocks show blank)
+                  try {
+                    const iframe = e.target as HTMLIFrameElement;
+                    // Can't access cross-origin content, but if it loaded, it's fine
+                    if (!iframe.contentDocument && !iframe.contentWindow) {
+                      // Might be blocked
+                    }
+                  } catch {
+                    // Cross-origin is expected, iframe loaded successfully
+                  }
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Screenshot mode */}
+      {viewMode === 'screenshot' && (
         <div
           onPaste={(e) => {
             const items = e.clipboardData?.items;
