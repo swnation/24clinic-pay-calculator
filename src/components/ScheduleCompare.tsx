@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useCallback } from 'react';
 import type { Shift } from '../types';
 import { useAppStore } from '../store';
 import { isHolidayOrSunday, isSaturday, getHolidayName } from '../utils/holidays';
@@ -16,10 +16,11 @@ function pad(n: number): string {
 export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const { state, getShiftsForMonth } = useAppStore();
   const [image, setImage] = useState<string | null>(null);
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'site' | 'screenshot' | 'parsed'>('site');
-  const [iframeBlocked, setIframeBlocked] = useState(false);
+  const [viewMode, setViewMode] = useState<'screenshot' | 'parsed'>('screenshot');
   const fileRef = useRef<HTMLInputElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const monthStr = `${year}-${pad(month)}`;
   const shifts = getShiftsForMonth(monthStr);
@@ -41,6 +42,16 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     reader.onload = () => { setImage(reader.result as string); setViewMode('screenshot'); };
     reader.readAsDataURL(file);
   };
+
+  // Capture screenshot dimensions after it renders
+  const onImageLoad = useCallback(() => {
+    if (imgRef.current) {
+      setImageSize({
+        width: imgRef.current.clientWidth,
+        height: imgRef.current.clientHeight,
+      });
+    }
+  }, []);
 
   const calendarDays = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1);
@@ -66,34 +77,44 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
 
   const fullCalendar = (
-    <div className="overflow-x-auto">
-      <div className="grid grid-cols-7 border-t border-l border-gray-400 min-w-[600px]">
-        {dayNames.map((name, i) => (
-          <div key={name} className={`text-center text-xs font-bold py-1.5 border-b border-r border-gray-400 ${
-            i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
-          }`}>{name}</div>
-        ))}
-        {calendarDays.map((day, idx) => {
-          if (day === null) {
-            return <div key={`e-${idx}`} className="border-b border-r border-gray-300 bg-white min-h-[80px] sm:min-h-[100px]" />;
-          }
-          const dateStr = `${year}-${pad(month)}-${pad(day)}`;
-          const isHolSun = isHolidayOrSunday(dateStr, state.customHolidays);
-          const isSat = isSaturday(dateStr);
-          const holiday = getHolidayName(dateStr);
-          const dayShifts = shiftsByDate.get(dateStr) || [];
-          const room1 = dayShifts.filter(s => s.room === 1).sort((a, b) => a.startHour - b.startHour);
-          const room2 = dayShifts.filter(s => s.room === 2).sort((a, b) => a.startHour - b.startHour);
+    <div className="grid grid-cols-7 border-t border-l border-gray-400">
+      {dayNames.map((name, i) => (
+        <div key={name} className={`text-center text-xs font-bold py-1.5 border-b border-r border-gray-400 ${
+          i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
+        }`}>{name}</div>
+      ))}
+      {calendarDays.map((day, idx) => {
+        if (day === null) {
+          return <div key={`e-${idx}`} className="border-b border-r border-gray-300 bg-white min-h-[80px]" />;
+        }
+        const dateStr = `${year}-${pad(month)}-${pad(day)}`;
+        const isHolSun = isHolidayOrSunday(dateStr, state.customHolidays);
+        const isSat = isSaturday(dateStr);
+        const holiday = getHolidayName(dateStr);
+        const dayShifts = shiftsByDate.get(dateStr) || [];
+        const room1 = dayShifts.filter(s => s.room === 1).sort((a, b) => a.startHour - b.startHour);
+        const room2 = dayShifts.filter(s => s.room === 2).sort((a, b) => a.startHour - b.startHour);
 
-          return (
-            <div key={dateStr} className="border-b border-r border-gray-300 bg-white min-h-[80px] sm:min-h-[100px] p-1">
-              <div className="flex items-baseline gap-1 mb-0.5">
-                <span className={`font-bold text-xs ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
-                {holiday && <span className="text-[8px] text-red-500 font-medium">{holiday}</span>}
+        return (
+          <div key={dateStr} className="border-b border-r border-gray-300 bg-white min-h-[80px] p-1">
+            <div className="flex items-baseline gap-1 mb-0.5">
+              <span className={`font-bold text-xs ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
+              {holiday && <span className="text-[8px] text-red-500 font-medium">{holiday}</span>}
+            </div>
+            <div className="flex gap-0.5">
+              <div className="flex-1 space-y-0.5">
+                {room1.map(s => (
+                  <div key={s.id} className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[3px] rounded-sm whitespace-nowrap overflow-hidden ${
+                    filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''
+                  }`} style={{ backgroundColor: getDoctorColor(s.doctorId) }}>
+                    <span className="font-medium">{getDoctorName(s.doctorId)}</span>
+                    <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
+                  </div>
+                ))}
               </div>
-              <div className="flex gap-0.5">
+              {room2.length > 0 && (
                 <div className="flex-1 space-y-0.5">
-                  {room1.map(s => (
+                  {room2.map(s => (
                     <div key={s.id} className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[3px] rounded-sm whitespace-nowrap overflow-hidden ${
                       filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''
                     }`} style={{ backgroundColor: getDoctorColor(s.doctorId) }}>
@@ -102,23 +123,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                     </div>
                   ))}
                 </div>
-                {room2.length > 0 && (
-                  <div className="flex-1 space-y-0.5">
-                    {room2.map(s => (
-                      <div key={s.id} className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[3px] rounded-sm whitespace-nowrap overflow-hidden ${
-                        filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''
-                      }`} style={{ backgroundColor: getDoctorColor(s.doctorId) }}>
-                        <span className="font-medium">{getDoctorName(s.doctorId)}</span>
-                        <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              )}
             </div>
-          );
-        })}
-      </div>
+          </div>
+        );
+      })}
     </div>
   );
 
@@ -133,53 +142,36 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none">&gt;</button>
       </div>
 
-      {/* Toggle: 사이트 / 스크린샷 / 파싱결과 */}
-      <div className="flex items-center gap-1 mb-3 bg-gray-100 rounded-lg p-1 max-w-sm mx-auto">
-        <button onClick={() => setViewMode('site')}
-          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${viewMode === 'site' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
-          사이트
-        </button>
+      {/* Toggle: 스크린샷 / 파싱결과 */}
+      <div className="flex items-center gap-1 mb-3 bg-gray-100 rounded-lg p-1 max-w-xs mx-auto">
         <button onClick={() => setViewMode('screenshot')}
-          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${viewMode === 'screenshot' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
+          className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${viewMode === 'screenshot' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
           스크린샷
         </button>
         <button onClick={() => setViewMode('parsed')}
-          className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${viewMode === 'parsed' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
+          className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${viewMode === 'parsed' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
           파싱결과 ({shifts.length})
         </button>
       </div>
 
-      {/* Live site iframe */}
-      {viewMode === 'site' && (
-        <div>
-          {iframeBlocked ? (
-            <div className="text-center py-8">
-              <p className="text-sm text-gray-500 mb-3">사이트 임베드가 차단되었습니다.</p>
-              <div className="flex gap-2 justify-center">
-                <a href="https://24clinic.kr/schedule.html" target="_blank" rel="noopener noreferrer"
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                  새 탭에서 열기
-                </a>
-                <button onClick={() => setViewMode('screenshot')}
-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium">
-                  스크린샷으로 비교
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="border border-gray-300 rounded-lg overflow-hidden" style={{ height: '70vh' }}>
-                <iframe
-                  src="https://24clinic.kr/schedule.html"
-                  className="w-full h-full border-0"
-                />
-              </div>
-              <p className="text-xs text-gray-400 text-center mt-2">
-                사이트가 표시되지 않으면
-                <button onClick={() => setIframeBlocked(true)} className="text-blue-500 underline ml-1">여기를 터치</button>
-              </p>
-            </div>
-          )}
+      {/* Doctor filter (always visible when image exists) */}
+      {image && (
+        <div className="flex flex-wrap gap-1.5 mb-3 justify-center">
+          <button onClick={() => setFilterDoctor('all')}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
+              filterDoctor === 'all' ? 'border-gray-700 bg-white shadow-sm' : 'border-gray-200 opacity-50'
+            }`}>전체</button>
+          {state.doctors.map(d => {
+            const hasShifts = shifts.some(s => s.doctorId === d.id);
+            if (!hasShifts) return null;
+            return (
+              <button key={d.id} onClick={() => setFilterDoctor(filterDoctor === d.id ? 'all' : d.id)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
+                  filterDoctor === d.id ? 'border-gray-700 shadow-sm' : 'border-gray-200 opacity-50'
+                }`} style={{ backgroundColor: d.color }}>{d.name}</button>
+            );
+          })}
+          {filterDoctor !== 'all' && <span className="text-[11px] text-gray-400 self-center">{filteredCount}건</span>}
         </div>
       )}
 
@@ -191,14 +183,15 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
             if (!items) return;
             for (const item of items) {
               if (item.type.startsWith('image/')) {
+                e.preventDefault();
                 const file = item.getAsFile();
-                if (file) { handlePasteImage(file); e.preventDefault(); }
+                if (file) handlePasteImage(file);
                 break;
               }
             }
           }}
           tabIndex={0}
-          className="focus:outline-none"
+          className="focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset rounded-lg"
         >
           {!image ? (
             <div className="flex flex-col items-center gap-4 py-8 border-2 border-dashed border-gray-300 rounded-lg mx-2">
@@ -216,11 +209,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               <div className="flex justify-end gap-1.5 mb-2">
                 <button onClick={() => fileRef.current?.click()}
                   className="px-2 py-1 text-[11px] bg-gray-100 rounded active:bg-gray-200">교체</button>
-                <button onClick={() => setImage(null)}
+                <button onClick={() => { setImage(null); setImageSize(null); }}
                   className="px-2 py-1 text-[11px] bg-red-50 text-red-600 rounded active:bg-red-100">삭제</button>
               </div>
               <div className="border border-gray-300 rounded-lg overflow-auto bg-gray-50">
-                <img src={image} alt="원본 스케줄" className="w-full" />
+                <img ref={imgRef} src={image} alt="원본 스케줄" className="w-full" onLoad={onImageLoad} />
               </div>
             </div>
           )}
@@ -228,28 +221,13 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
         </div>
       )}
 
-      {/* Parsed data mode */}
+      {/* Parsed data mode - match screenshot size */}
       {viewMode === 'parsed' && (
         <div>
-          <div className="flex flex-wrap gap-1.5 mb-3 justify-center">
-            <button onClick={() => setFilterDoctor('all')}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
-                filterDoctor === 'all' ? 'border-gray-700 bg-white shadow-sm' : 'border-gray-200 opacity-50'
-              }`}>전체</button>
-            {state.doctors.map(d => {
-              const hasShifts = shifts.some(s => s.doctorId === d.id);
-              if (!hasShifts) return null;
-              return (
-                <button key={d.id} onClick={() => setFilterDoctor(filterDoctor === d.id ? 'all' : d.id)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
-                    filterDoctor === d.id ? 'border-gray-700 shadow-sm' : 'border-gray-200 opacity-50'
-                  }`} style={{ backgroundColor: d.color }}>{d.name}</button>
-              );
-            })}
-            {filterDoctor !== 'all' && <span className="text-[11px] text-gray-400 self-center">{filteredCount}건</span>}
-          </div>
-
-          <div className="border border-gray-300 rounded-lg overflow-auto">
+          <div
+            className="border border-gray-300 rounded-lg overflow-auto"
+            style={imageSize ? { width: imageSize.width, maxWidth: '100%' } : undefined}
+          >
             {shifts.length > 0 ? fullCalendar : (
               <p className="text-sm text-gray-500 text-center py-8">
                 이 달에 파싱된 근무가 없습니다.<br />스케줄 탭에서 먼저 붙여넣기 해주세요.
@@ -260,7 +238,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
       )}
 
       <p className="text-xs text-gray-400 text-center mt-3">
-        원본 ↔ 파싱결과를 전환하면서 이름+시간으로 비교하세요.
+        스크린샷 ↔ 파싱결과를 전환하면서 이름+시간으로 비교하세요.
       </p>
     </div>
   );
