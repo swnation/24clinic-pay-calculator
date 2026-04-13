@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import type { RatesBySlot, DayType, TimeSlot } from '../types';
 import { DAY_TYPE_LABELS, TIME_SLOT_LABELS, rateKey } from '../types';
 import { useAppStore } from '../store';
-import { getEffectiveRates, calculateMonthlyWage, calculateWeeklyHours } from '../utils/wageCalculator';
+import { getEffectiveRates, getEffectiveRatesWithPersonal, calculateMonthlyWage, calculateWeeklyHours } from '../utils/wageCalculator';
 
 interface Props {
   year: number;
@@ -18,20 +18,32 @@ const DAY_TYPES: DayType[] = ['weekday', 'saturday', 'sunday', 'holiday'];
 const TIME_SLOTS: TimeSlot[] = ['morning', 'afternoon', 'evening'];
 
 export default function WageSummary({ year, month, onMonthChange }: Props) {
-  const { state, getShiftsForDoctor, setBranchMonthlyRate } = useAppStore();
-  const [selectedDoctor, setSelectedDoctor] = useState(state.doctors[0]?.id || '');
+  const { state, getShiftsForDoctor, setBranchMonthlyRate, currentUser, isAdmin } = useAppStore();
+
+  // Non-admin: can only see own doctor. Admin: can see all.
+  const myDoctorId = currentUser?.doctorId || '';
+  const [selectedDoctor, setSelectedDoctor] = useState(isAdmin ? (state.doctors[0]?.id || '') : myDoctorId);
+
+  // Force own doctor for non-admin
+  const effectiveDoctor = isAdmin ? selectedDoctor : myDoctorId;
   const [showRateEditor, setShowRateEditor] = useState(false);
 
   const monthStr = `${year}-${pad(month)}`;
 
-  const rates = useMemo(() =>
-    getEffectiveRates(monthStr, state.defaultRates, state.branchMonthlyRates),
-    [monthStr, state.defaultRates, state.branchMonthlyRates]
-  );
+  // Use personal rates for own doctor, branch rates for others (admin only)
+  const rates = useMemo(() => {
+    if (effectiveDoctor === myDoctorId && currentUser) {
+      return getEffectiveRatesWithPersonal(
+        monthStr, state.defaultRates, state.branchMonthlyRates,
+        currentUser.personalRates, currentUser.personalMonthlyRates
+      );
+    }
+    return getEffectiveRates(monthStr, state.defaultRates, state.branchMonthlyRates);
+  }, [monthStr, state.defaultRates, state.branchMonthlyRates, currentUser, effectiveDoctor, myDoctorId]);
 
   const doctorShifts = useMemo(() =>
-    getShiftsForDoctor(selectedDoctor, monthStr),
-    [selectedDoctor, monthStr, state.shifts]
+    getShiftsForDoctor(effectiveDoctor, monthStr),
+    [effectiveDoctor, monthStr, state.shifts]
   );
 
   const breakdown = useMemo(() =>
@@ -44,7 +56,7 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
     [doctorShifts, year, month]
   );
 
-  const doctor = state.doctors.find(d => d.id === selectedDoctor);
+  const doctor = state.doctors.find(d => d.id === effectiveDoctor);
 
   const prevMonth = () => {
     if (month === 1) onMonthChange(year - 1, 12);
@@ -64,23 +76,31 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
         <button onClick={nextMonth} className="p-3 active:bg-gray-200 hover:bg-gray-100 rounded-lg text-2xl select-none">&gt;</button>
       </div>
 
-      {/* Doctor selector */}
-      <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-5 justify-center">
-        {state.doctors.map(d => (
-          <button
-            key={d.id}
-            onClick={() => setSelectedDoctor(d.id)}
-            className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border-2 transition-all ${
-              selectedDoctor === d.id
-                ? 'border-gray-700 shadow-md scale-105'
-                : 'border-transparent opacity-50'
-            }`}
-            style={{ backgroundColor: d.color }}
-          >
-            {d.name}
-          </button>
-        ))}
-      </div>
+      {/* Doctor selector - admin only */}
+      {isAdmin ? (
+        <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-5 justify-center">
+          {state.doctors.filter(d => !d.archived).map(d => (
+            <button
+              key={d.id}
+              onClick={() => setSelectedDoctor(d.id)}
+              className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border-2 transition-all ${
+                effectiveDoctor === d.id
+                  ? 'border-gray-700 shadow-md scale-105'
+                  : 'border-transparent opacity-50'
+              }`}
+              style={{ backgroundColor: d.color }}
+            >
+              {d.name}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center mb-5">
+          <span className="px-4 py-2 rounded-lg text-sm font-medium inline-block" style={{ backgroundColor: doctor?.color }}>
+            {doctor?.name}
+          </span>
+        </div>
+      )}
 
       {doctor && (
         <>
@@ -146,8 +166,8 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
             </div>
           </div>
 
-          {/* Branch monthly rate editor */}
-          {(() => {
+          {/* Branch monthly rate editor - admin only */}
+          {isAdmin && (() => {
             const branchOverride = state.branchMonthlyRates.find(r => r.month === monthStr);
             const handleRateChange = (key: keyof RatesBySlot, value: string) => {
               const num = value === '' ? undefined : Number(value);
