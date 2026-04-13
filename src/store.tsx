@@ -2,7 +2,15 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, ty
 import type { Doctor, Shift, RatesBySlot, BranchMonthlyRate, SpecialRatePeriod } from './types';
 import { DEFAULT_RATES, DOCTOR_COLORS } from './types';
 import { getKoreanHolidaysForYear } from './utils/holidays';
-import { signIn, signOut, isSignedIn, saveToDrive, loadFromDrive } from './services/googleDrive';
+import {
+  auth, signInWithGoogle, signOutGoogle,
+  getUserProfile, setUserProfile, updateUserRole, deleteUserProfile, getAllUsers,
+  loadAppData, saveAppData,
+  type User, type UserProfile,
+} from './services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+
+export type { UserProfile };
 
 interface AppState {
   doctors: Doctor[];
@@ -35,18 +43,27 @@ interface AppContextType {
   getShiftsForDoctor: (doctorId: string, month: string) => Shift[];
   importData: (data: Record<string, unknown>) => void;
   resetData: () => void;
-  // Google Drive sync
-  googleClientId: string;
-  setGoogleClientId: (id: string) => void;
-  isGoogleSignedIn: boolean;
-  googleSignIn: () => Promise<void>;
-  googleSignOut: () => void;
-  saveToCloud: () => Promise<boolean>;
-  loadFromCloud: () => Promise<boolean>;
-  cloudSyncStatus: 'idle' | 'saving' | 'loading' | 'success' | 'error';
-}
 
-const CLIENT_ID_KEY = '24clinic-google-client-id';
+  // Auth & User
+  firebaseUser: User | null;
+  currentUser: UserProfile | null;
+  authLoading: boolean;
+  needsRegistration: boolean;
+  isAdmin: boolean;
+  signIn: () => Promise<void>;
+  signOut: () => void;
+  registerUser: (doctorName: string) => Promise<{ success: boolean; error?: string }>;
+
+  // User management (admin)
+  allUsers: { uid: string; profile: UserProfile }[];
+  refreshUsers: () => Promise<void>;
+  setRole: (uid: string, role: 'admin' | 'doctor') => Promise<void>;
+  removeUser: (uid: string) => Promise<void>;
+
+  // Save
+  saveStatus: 'idle' | 'saving' | 'saved' | 'error';
+  saveNow: () => Promise<void>;
+}
 
 const defaultDoctors: Doctor[] = [
   { id: 'd3', name: '유성우', color: '#E0E0E0' },
@@ -66,7 +83,6 @@ const defaultHolidays = [
   ...getKoreanHolidaysForYear(currentYear + 1),
 ];
 
-// 잠실점 월별 시급 프리셋 (기본급 4,6과 다른 항목만)
 const presetBranchMonthlyRates: BranchMonthlyRate[] = [
   { month: '2024-09', rates: { saturdayEvening: 7 } },
   { month: '2025-01', rates: { weekdayEvening: 7, saturdayAfternoon: 7, sundayMorning: 7, sundayAfternoon: 7, sundayEvening: 7, holidayMorning: 7, holidayAfternoon: 7, holidayEvening: 7 } },
@@ -119,38 +135,91 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(defaultState);
 
-  // Google Drive sync state
-  const [googleClientId, setGoogleClientIdState] = useState(() => localStorage.getItem(CLIENT_ID_KEY) || '');
-  const [isGoogleSignedInState, setIsGoogleSignedIn] = useState(false);
-  const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'saving' | 'loading' | 'success' | 'error'>('idle');
+  // Auth state
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [needsRegistration, setNeedsRegistration] = useState(false);
+  const [allUsers, setAllUsers] = useState<{ uid: string; profile: UserProfile }[]>([]);
 
+  // Save state
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialLoadDone = useRef(false);
+  const dataLoaded = useRef(false);
 
-  // Auto-save to Google Drive (debounced)
+  // Firebase Auth listener
   useEffect(() => {
-    if (!isSignedIn() || !initialLoadDone.current) return;
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
+      if (user) {
+        try {
+          const profile = await getUserProfile(user.uid);
+          if (profile) {
+            // Check if linked doctor still exists and is active
+            const data = await loadAppData();
+            if (data) {
+              const loaded = parseLoadedData(data);
+              const doctor = loaded.doctors.find(d => d.id === profile.doctorId);
+              if (!doctor) {
+                // Doctor was deleted - block access
+                setCurrentUser(null);
+                setNeedsRegistration(false);
+                setAuthLoading(false);
+                return;
+              }
+              setState(loaded);
+            } else {
+              // First time - seed default data
+              await saveAppData(defaultState as unknown as Record<string, unknown>);
+            }
+            setCurrentUser(profile);
+            setNeedsRegistration(false);
+            dataLoaded.current = true;
+          } else {
+            // New user - load app data for doctor list
+            const data = await loadAppData();
+            if (data) {
+              setState(parseLoadedData(data));
+            } else {
+              await saveAppData(defaultState as unknown as Record<string, unknown>);
+            }
+            setNeedsRegistration(true);
+          }
+        } catch (e) {
+          console.error('Auth init error:', e);
+        }
+      } else {
+        setCurrentUser(null);
+        setNeedsRegistration(false);
+        setState(defaultState);
+        dataLoaded.current = false;
+      }
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  // Auto-save to Firestore (debounced)
+  useEffect(() => {
+    if (!firebaseUser || !currentUser || !dataLoaded.current) return;
+    if (currentUser.role !== 'admin') return;
+
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      setCloudSyncStatus('saving');
-      saveToDrive(state as unknown as Record<string, unknown>)
-        .then(ok => {
-          setCloudSyncStatus(ok ? 'success' : 'error');
-          if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
-          statusTimerRef.current = setTimeout(() => setCloudSyncStatus('idle'), 2000);
-        })
-        .catch(() => {
-          setCloudSyncStatus('error');
-          if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
-          statusTimerRef.current = setTimeout(() => setCloudSyncStatus('idle'), 2000);
-        });
+    saveTimerRef.current = setTimeout(async () => {
+      setSaveStatus('saving');
+      const ok = await saveAppData(state as unknown as Record<string, unknown>);
+      setSaveStatus(ok ? 'saved' : 'error');
+      if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+      statusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
     }, 3000);
+
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
     };
-  }, [state]);
+  }, [state, firebaseUser, currentUser]);
+
+  // --- Actions ---
 
   const addDoctor = (name: string): Doctor => {
     const usedColors = state.doctors.map(d => d.color);
@@ -161,10 +230,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateDoctor = (doctor: Doctor) => {
-    setState(s => ({
-      ...s,
-      doctors: s.doctors.map(d => d.id === doctor.id ? doctor : d),
-    }));
+    setState(s => ({ ...s, doctors: s.doctors.map(d => d.id === doctor.id ? doctor : d) }));
   };
 
   const removeDoctor = (id: string) => {
@@ -176,22 +242,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addShift = (shift: Omit<Shift, 'id'>) => {
-    const newShift: Shift = { ...shift, id: genId() };
-    setState(s => ({ ...s, shifts: [...s.shifts, newShift] }));
+    setState(s => ({ ...s, shifts: [...s.shifts, { ...shift, id: genId() }] }));
   };
 
   const updateShift = (shift: Shift) => {
-    setState(s => ({
-      ...s,
-      shifts: s.shifts.map(sh => sh.id === shift.id ? shift : sh),
-    }));
+    setState(s => ({ ...s, shifts: s.shifts.map(sh => sh.id === shift.id ? shift : sh) }));
   };
 
   const removeShift = (id: string) => {
-    setState(s => ({
-      ...s,
-      shifts: s.shifts.filter(sh => sh.id !== id),
-    }));
+    setState(s => ({ ...s, shifts: s.shifts.filter(sh => sh.id !== id) }));
   };
 
   const bulkImport = (
@@ -202,9 +261,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const nameToId = new Map<string, string>();
       const usedColors = new Set(s.doctors.map(d => d.color));
       const newDoctors: Doctor[] = [];
-
       for (const d of s.doctors) nameToId.set(d.name, d.id);
-
       for (const sh of shifts) {
         if (!nameToId.has(sh.doctorName)) {
           const color = DOCTOR_COLORS.find(c => !usedColors.has(c)) || DOCTOR_COLORS[0];
@@ -214,11 +271,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           nameToId.set(sh.doctorName, doc.id);
         }
       }
-
       const filteredShifts = monthsToReplace.length > 0
         ? s.shifts.filter(sh => !monthsToReplace.some(mp => sh.date.startsWith(mp)))
         : s.shifts;
-
       const newShifts: Shift[] = shifts.map(sh => ({
         id: genId(),
         doctorId: nameToId.get(sh.doctorName)!,
@@ -227,51 +282,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
         endHour: sh.endHour,
         room: sh.room,
       }));
-
-      return {
-        ...s,
-        doctors: [...s.doctors, ...newDoctors],
-        shifts: [...filteredShifts, ...newShifts],
-      };
+      return { ...s, doctors: [...s.doctors, ...newDoctors], shifts: [...filteredShifts, ...newShifts] };
     });
   };
 
-  const setDefaultRates = (rates: RatesBySlot) => {
-    setState(s => ({ ...s, defaultRates: rates }));
-  };
+  const setDefaultRates = (rates: RatesBySlot) => setState(s => ({ ...s, defaultRates: rates }));
 
   const setBranchMonthlyRate = (month: string, rates: Partial<RatesBySlot>) => {
     setState(s => {
-      const existing = s.branchMonthlyRates.findIndex(r => r.month === month);
+      const idx = s.branchMonthlyRates.findIndex(r => r.month === month);
       const newRates = [...s.branchMonthlyRates];
-      if (existing >= 0) {
-        newRates[existing] = { month, rates };
-      } else {
-        newRates.push({ month, rates });
-      }
+      if (idx >= 0) newRates[idx] = { month, rates };
+      else newRates.push({ month, rates });
       return { ...s, branchMonthlyRates: newRates };
     });
   };
 
   const removeBranchMonthlyRate = (month: string) => {
-    setState(s => ({
-      ...s,
-      branchMonthlyRates: s.branchMonthlyRates.filter(r => r.month !== month),
-    }));
+    setState(s => ({ ...s, branchMonthlyRates: s.branchMonthlyRates.filter(r => r.month !== month) }));
   };
 
   const addSpecialRatePeriod = (period: Omit<SpecialRatePeriod, 'id'>) => {
-    setState(s => ({
-      ...s,
-      specialRatePeriods: [...s.specialRatePeriods, { ...period, id: genId() }],
-    }));
+    setState(s => ({ ...s, specialRatePeriods: [...s.specialRatePeriods, { ...period, id: genId() }] }));
   };
 
   const removeSpecialRatePeriod = (id: string) => {
-    setState(s => ({
-      ...s,
-      specialRatePeriods: s.specialRatePeriods.filter(p => p.id !== id),
-    }));
+    setState(s => ({ ...s, specialRatePeriods: s.specialRatePeriods.filter(p => p.id !== id) }));
   };
 
   const toggleHoliday = (date: string) => {
@@ -283,129 +319,121 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const setCustomHolidays = (dates: string[]) => {
-    setState(s => ({ ...s, customHolidays: dates }));
-  };
+  const setCustomHolidays = (dates: string[]) => setState(s => ({ ...s, customHolidays: dates }));
+  const setBranchName = (name: string) => setState(s => ({ ...s, branchName: name }));
 
-  const setBranchName = (name: string) => {
-    setState(s => ({ ...s, branchName: name }));
-  };
-
-  const getShiftsForMonth = (month: string): Shift[] => {
-    return state.shifts.filter(s => s.date.startsWith(month));
-  };
-
-  const getShiftsForDoctor = (doctorId: string, month: string): Shift[] => {
-    return state.shifts.filter(s => s.doctorId === doctorId && s.date.startsWith(month));
-  };
+  const getShiftsForMonth = (month: string): Shift[] => state.shifts.filter(s => s.date.startsWith(month));
+  const getShiftsForDoctor = (doctorId: string, month: string): Shift[] =>
+    state.shifts.filter(s => s.doctorId === doctorId && s.date.startsWith(month));
 
   const importData = (data: Record<string, unknown>) => {
     setState(parseLoadedData(data));
-    // If signed in, immediately save imported data to Drive
-    if (isSignedIn()) {
-      initialLoadDone.current = true;
-    }
+    dataLoaded.current = true;
   };
 
-  const resetData = () => {
-    setState(defaultState);
-  };
+  const resetData = () => setState(defaultState);
 
-  // Google Drive sync actions
-  const setGoogleClientId = (id: string) => {
-    localStorage.setItem(CLIENT_ID_KEY, id);
-    setGoogleClientIdState(id);
-  };
+  // --- Auth actions ---
 
-  const googleSignIn = useCallback(async () => {
-    if (!googleClientId) return;
+  const signIn = useCallback(async () => {
     try {
-      await signIn(googleClientId);
-      setIsGoogleSignedIn(true);
-      // Auto-load from Drive on sign-in
-      setCloudSyncStatus('loading');
-      try {
-        const data = await loadFromDrive();
-        if (data) {
-          setState(parseLoadedData(data));
-          initialLoadDone.current = true;
-          setCloudSyncStatus('success');
-          if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
-          statusTimerRef.current = setTimeout(() => setCloudSyncStatus('idle'), 2000);
-          return;
-        }
-        // No cloud data yet - mark as ready for auto-save
-        initialLoadDone.current = true;
-        setCloudSyncStatus('idle');
-      } catch {
-        // Load failed - do NOT set initialLoadDone to prevent overwriting cloud data
-        setCloudSyncStatus('error');
-        if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
-        statusTimerRef.current = setTimeout(() => setCloudSyncStatus('idle'), 2000);
-      }
-    } catch {
-      setIsGoogleSignedIn(false);
-    }
-  }, [googleClientId]);
-
-  const googleSignOut = () => {
-    signOut();
-    setIsGoogleSignedIn(false);
-  };
-
-  const saveToCloud = useCallback(async (): Promise<boolean> => {
-    if (!isSignedIn()) return false;
-    setCloudSyncStatus('saving');
-    try {
-      const ok = await saveToDrive(state as unknown as Record<string, unknown>);
-      setCloudSyncStatus(ok ? 'success' : 'error');
-      setTimeout(() => setCloudSyncStatus('idle'), 2000);
-      return ok;
-    } catch {
-      setCloudSyncStatus('error');
-      setTimeout(() => setCloudSyncStatus('idle'), 2000);
-      return false;
-    }
-  }, [state]);
-
-  const loadFromCloud = useCallback(async (): Promise<boolean> => {
-    if (!isSignedIn()) return false;
-    setCloudSyncStatus('loading');
-    try {
-      const data = await loadFromDrive();
-      if (!data) {
-        setCloudSyncStatus('error');
-        setTimeout(() => setCloudSyncStatus('idle'), 2000);
-        return false;
-      }
-      setState(parseLoadedData(data));
-      initialLoadDone.current = true;
-      setCloudSyncStatus('success');
-      setTimeout(() => setCloudSyncStatus('idle'), 2000);
-      return true;
-    } catch {
-      setCloudSyncStatus('error');
-      setTimeout(() => setCloudSyncStatus('idle'), 2000);
-      return false;
+      await signInWithGoogle();
+      // onAuthStateChanged handles the rest
+    } catch (e) {
+      console.error('Sign in error:', e);
     }
   }, []);
+
+  const signOut = useCallback(() => {
+    signOutGoogle();
+    // onAuthStateChanged handles cleanup
+  }, []);
+
+  const registerUser = useCallback(async (doctorName: string): Promise<{ success: boolean; error?: string }> => {
+    if (!firebaseUser) return { success: false, error: '로그인이 필요합니다.' };
+
+    const trimmed = doctorName.trim();
+    if (!trimmed) return { success: false, error: '이름을 입력해주세요.' };
+
+    // Find matching active doctor
+    const doctor = state.doctors.find(d => d.name === trimmed);
+    if (!doctor) return { success: false, error: '근무중인 의사 목록에 없는 이름입니다.' };
+
+    // Check if doctor is already claimed
+    const users = await getAllUsers();
+    const claimed = users.find(u => u.profile.doctorId === doctor.id);
+    if (claimed) return { success: false, error: `'${trimmed}' 은(는) 이미 다른 계정에 연결되어 있습니다.` };
+
+    // Determine role: 유성우 = admin
+    const role = doctor.name === '유성우' ? 'admin' : 'doctor';
+
+    const profile: UserProfile = {
+      email: firebaseUser.email || '',
+      displayName: firebaseUser.displayName || trimmed,
+      doctorId: doctor.id,
+      doctorName: doctor.name,
+      role,
+      createdAt: Date.now(),
+    };
+
+    await setUserProfile(firebaseUser.uid, profile);
+    setCurrentUser(profile);
+    setNeedsRegistration(false);
+    dataLoaded.current = true;
+    setAllUsers([...users, { uid: firebaseUser.uid, profile }]);
+
+    return { success: true };
+  }, [firebaseUser, state.doctors]);
+
+  // --- Admin: user management ---
+
+  const refreshUsers = useCallback(async () => {
+    const users = await getAllUsers();
+    setAllUsers(users);
+  }, []);
+
+  const setRole = useCallback(async (uid: string, role: 'admin' | 'doctor') => {
+    await updateUserRole(uid, role);
+    setAllUsers(prev => prev.map(u => u.uid === uid ? { ...u, profile: { ...u.profile, role } } : u));
+    // If changing own role
+    if (firebaseUser?.uid === uid) {
+      setCurrentUser(prev => prev ? { ...prev, role } : prev);
+    }
+  }, [firebaseUser]);
+
+  const removeUser = useCallback(async (uid: string) => {
+    await deleteUserProfile(uid);
+    setAllUsers(prev => prev.filter(u => u.uid !== uid));
+  }, []);
+
+  // --- Save ---
+
+  const saveNow = useCallback(async () => {
+    if (!currentUser) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveStatus('saving');
+    const ok = await saveAppData(state as unknown as Record<string, unknown>);
+    setSaveStatus(ok ? 'saved' : 'error');
+    if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+    statusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
+  }, [state, currentUser]);
+
+  const isAdmin = currentUser?.role === 'admin';
 
   return (
     <AppContext.Provider value={{
       state,
       addDoctor, updateDoctor, removeDoctor,
       addShift, updateShift, removeShift, bulkImport,
-      setDefaultRates,
-      setBranchMonthlyRate, removeBranchMonthlyRate,
+      setDefaultRates, setBranchMonthlyRate, removeBranchMonthlyRate,
       addSpecialRatePeriod, removeSpecialRatePeriod,
-      toggleHoliday, setCustomHolidays,
-      setBranchName,
+      toggleHoliday, setCustomHolidays, setBranchName,
       getShiftsForMonth, getShiftsForDoctor,
       importData, resetData,
-      googleClientId, setGoogleClientId,
-      isGoogleSignedIn: isGoogleSignedInState,
-      googleSignIn, googleSignOut,
-      saveToCloud, loadFromCloud, cloudSyncStatus,
+      firebaseUser, currentUser, authLoading, needsRegistration, isAdmin,
+      signIn, signOut, registerUser,
+      allUsers, refreshUsers, setRole, removeUser,
+      saveStatus, saveNow,
     }}>
       {children}
     </AppContext.Provider>

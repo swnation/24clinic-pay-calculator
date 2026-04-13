@@ -70,7 +70,6 @@ export default function Settings() {
     state, addDoctor, updateDoctor, removeDoctor,
     setDefaultRates, addSpecialRatePeriod, removeSpecialRatePeriod,
     toggleHoliday, setBranchName,
-    googleClientId, setGoogleClientId,
     importData, resetData,
   } = useAppStore();
 
@@ -382,35 +381,6 @@ export default function Settings() {
             추가
           </button>
         </div>
-      </section>
-
-      {/* Google Drive */}
-      <section className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="font-bold text-lg mb-4">Google Drive 연동</h3>
-        <p className="text-sm text-gray-500 mb-4">
-          Google Drive에 데이터를 저장하면 브라우저 데이터가 지워져도 복구할 수 있습니다.
-        </p>
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Client ID</label>
-          <input
-            type="text"
-            value={googleClientId}
-            onChange={e => setGoogleClientId(e.target.value)}
-            placeholder="xxx.apps.googleusercontent.com"
-            className={`flex-1 border rounded-lg px-3 py-2 text-xs sm:text-sm ${
-              googleClientId.trim() ? 'border-green-400 bg-green-50' : ''
-            }`}
-          />
-        </div>
-        {googleClientId.trim() ? (
-          <p className="text-xs text-green-600 mt-2">
-            Client ID 저장됨. 상단 헤더의 "Google 로그인" 버튼으로 연동하세요.
-          </p>
-        ) : (
-          <p className="text-xs text-gray-400 mt-2">
-            Google Cloud Console에서 OAuth 클라이언트 ID를 생성하여 입력하세요.
-          </p>
-        )}
       </section>
 
       {/* Data management */}
