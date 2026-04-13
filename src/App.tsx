@@ -17,12 +17,10 @@ const TABS: { key: Tab; label: string }[] = [
 
 function CloudSyncButton() {
   const {
-    googleClientId, isGoogleSignedIn, googleSignIn, googleSignOut,
+    isGoogleSignedIn, googleSignIn, googleSignOut,
     saveToCloud, loadFromCloud, cloudSyncStatus,
   } = useAppStore();
   const [showMenu, setShowMenu] = useState(false);
-
-  if (!googleClientId) return null;
 
   if (!isGoogleSignedIn) {
     return (
@@ -98,7 +96,7 @@ function CloudSyncButton() {
 }
 
 function App() {
-  const { state, googleClientId, isGoogleSignedIn, googleSignIn } = useAppStore();
+  const { state, isGoogleSignedIn, googleSignIn } = useAppStore();
   const now = new Date();
   const [tab, setTab] = useState<Tab>('schedule');
   const [year, setYear] = useState(now.getFullYear());
@@ -123,7 +121,7 @@ function App() {
       </header>
 
       {/* Sign-in prompt when not logged in */}
-      {googleClientId && !isGoogleSignedIn && (
+      {!isGoogleSignedIn && (
         <div className="bg-yellow-50 border-b border-yellow-200">
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
             <p className="text-sm text-yellow-800">

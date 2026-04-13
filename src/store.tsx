@@ -36,8 +36,6 @@ interface AppContextType {
   importData: (data: Record<string, unknown>) => void;
   resetData: () => void;
   // Google Drive sync
-  googleClientId: string;
-  setGoogleClientId: (id: string) => void;
   isGoogleSignedIn: boolean;
   googleSignIn: () => Promise<void>;
   googleSignOut: () => void;
@@ -46,7 +44,7 @@ interface AppContextType {
   cloudSyncStatus: 'idle' | 'saving' | 'loading' | 'success' | 'error';
 }
 
-const CLIENT_ID_KEY = '24clinic-google-client-id';
+const GOOGLE_CLIENT_ID = '50114563761-dbn8aj0f62p2csjofurk8ua6vc9rfl3d.apps.googleusercontent.com';
 
 const defaultDoctors: Doctor[] = [
   { id: 'd3', name: '유성우', color: '#E0E0E0' },
@@ -120,7 +118,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(defaultState);
 
   // Google Drive sync state
-  const [googleClientId, setGoogleClientIdState] = useState(() => localStorage.getItem(CLIENT_ID_KEY) || '');
   const [isGoogleSignedInState, setIsGoogleSignedIn] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'saving' | 'loading' | 'success' | 'error'>('idle');
 
@@ -312,15 +309,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Google Drive sync actions
-  const setGoogleClientId = (id: string) => {
-    localStorage.setItem(CLIENT_ID_KEY, id);
-    setGoogleClientIdState(id);
-  };
-
   const googleSignIn = useCallback(async () => {
-    if (!googleClientId) return;
     try {
-      await signIn(googleClientId);
+      await signIn(GOOGLE_CLIENT_ID);
       setIsGoogleSignedIn(true);
       // Auto-load from Drive on sign-in
       setCloudSyncStatus('loading');
@@ -346,7 +337,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {
       setIsGoogleSignedIn(false);
     }
-  }, [googleClientId]);
+  }, []);
 
   const googleSignOut = () => {
     signOut();
@@ -402,7 +393,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBranchName,
       getShiftsForMonth, getShiftsForDoctor,
       importData, resetData,
-      googleClientId, setGoogleClientId,
       isGoogleSignedIn: isGoogleSignedInState,
       googleSignIn, googleSignOut,
       saveToCloud, loadFromCloud, cloudSyncStatus,
