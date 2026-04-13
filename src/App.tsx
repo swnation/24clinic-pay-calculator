@@ -15,34 +15,24 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'settings', label: '설정' },
 ];
 
-function CloudSyncButton() {
-  const {
-    isGoogleSignedIn, googleSignOut,
-    saveToCloud, loadFromCloud, cloudSyncStatus,
-  } = useAppStore();
-  const [showMenu, setShowMenu] = useState(false);
+function SaveButton() {
+  const { saveStatus, saveNow, isAdmin } = useAppStore();
+  if (!isAdmin) return null;
 
-  if (!isGoogleSignedIn) return null;
-
-  const isBusy = cloudSyncStatus === 'saving' || cloudSyncStatus === 'loading';
-
+  const isBusy = saveStatus === 'saving';
   return (
     <div className="flex items-center gap-1.5">
-      {cloudSyncStatus !== 'idle' && (
+      {saveStatus !== 'idle' && (
         <span className={`text-[10px] ${
-          cloudSyncStatus === 'success' ? 'text-green-400'
-          : cloudSyncStatus === 'error' ? 'text-red-400'
+          saveStatus === 'saved' ? 'text-green-400'
+          : saveStatus === 'error' ? 'text-red-400'
           : 'text-gray-400'
         }`}>
-          {cloudSyncStatus === 'saving' ? '저장중...'
-            : cloudSyncStatus === 'loading' ? '불러오는중...'
-            : cloudSyncStatus === 'success' ? '저장됨'
-            : '오류'}
+          {saveStatus === 'saving' ? '저장중...' : saveStatus === 'saved' ? '저장됨' : '오류'}
         </span>
       )}
-
       <button
-        onClick={saveToCloud}
+        onClick={saveNow}
         disabled={isBusy}
         className={`text-[10px] sm:text-xs px-2.5 py-1 rounded font-medium ${
           isBusy ? 'bg-gray-600 text-gray-400' : 'bg-green-600 text-white active:bg-green-700'
@@ -50,42 +40,12 @@ function CloudSyncButton() {
       >
         저장
       </button>
-
-      <div className="relative">
-        <button
-          onClick={() => setShowMenu(!showMenu)}
-          className="text-[10px] sm:text-xs px-1.5 py-1 rounded bg-gray-700 text-gray-300 active:bg-gray-600"
-        >
-          ⋮
-        </button>
-        {showMenu && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-            <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border z-50 py-1 min-w-[140px]">
-              <button
-                onClick={() => { loadFromCloud(); setShowMenu(false); }}
-                className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 active:bg-gray-100"
-              >
-                Drive에서 불러오기
-              </button>
-              <hr className="my-1" />
-              <button
-                onClick={() => { googleSignOut(); setShowMenu(false); }}
-                className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50 active:bg-gray-100"
-              >
-                로그아웃
-              </button>
-            </div>
-          </>
-        )}
-      </div>
     </div>
   );
 }
 
 function LoginScreen() {
-  const { googleSignIn, cloudSyncStatus } = useAppStore();
-  const isLoading = cloudSyncStatus === 'loading';
+  const { signIn, authLoading } = useAppStore();
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -95,14 +55,14 @@ function LoginScreen() {
             <h1 className="text-2xl font-bold text-gray-900 mb-1">24시 열린의원</h1>
             <p className="text-sm text-gray-400 mb-8">급여 계산기</p>
 
-            {isLoading ? (
+            {authLoading ? (
               <div className="py-4">
                 <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-sm text-gray-500">데이터 불러오는 중...</p>
+                <p className="text-sm text-gray-500">로딩 중...</p>
               </div>
             ) : (
               <button
-                onClick={googleSignIn}
+                onClick={signIn}
                 className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-lg px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -121,8 +81,108 @@ function LoginScreen() {
   );
 }
 
+function DoctorMatchScreen() {
+  const { state, registerUser, signOut } = useAppStore();
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const result = await registerUser(name);
+    if (!result.success) {
+      setError(result.error || '등록에 실패했습니다.');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-sm">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+            <h1 className="text-xl font-bold text-gray-900 mb-1 text-center">의사 이름 확인</h1>
+            <p className="text-sm text-gray-400 mb-6 text-center">
+              본인의 이름을 한글로 입력해주세요.
+            </p>
+
+            <form onSubmit={handleSubmit}>
+              <input
+                type="text"
+                value={name}
+                onChange={e => { setName(e.target.value); setError(''); }}
+                placeholder="예: 홍길동"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+                disabled={loading}
+              />
+
+              {error && (
+                <p className="text-sm text-red-500 mb-3">{error}</p>
+              )}
+
+              <div className="text-xs text-gray-400 mb-4">
+                <p className="mb-1">현재 근무중인 의사:</p>
+                <div className="flex flex-wrap gap-1">
+                  {state.doctors.map(d => (
+                    <span key={d.id} className="px-2 py-0.5 rounded-full text-[11px]" style={{ backgroundColor: d.color }}>
+                      {d.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || !name.trim()}
+                className="w-full bg-blue-600 text-white rounded-lg px-4 py-3 text-sm font-medium active:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500"
+              >
+                {loading ? '확인 중...' : '확인'}
+              </button>
+            </form>
+
+            <button
+              onClick={signOut}
+              className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600 py-2"
+            >
+              다른 계정으로 로그인
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlockedScreen() {
+  const { signOut } = useAppStore();
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+            <h1 className="text-xl font-bold text-gray-900 mb-2">접근 권한 없음</h1>
+            <p className="text-sm text-gray-500 mb-6">
+              연결된 의사 계정이 삭제되었거나<br />등록되지 않은 계정입니다.
+            </p>
+            <button
+              onClick={signOut}
+              className="bg-gray-100 text-gray-700 px-6 py-2.5 rounded-lg text-sm font-medium active:bg-gray-200"
+            >
+              로그아웃
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
-  const { state, isGoogleSignedIn, cloudSyncStatus } = useAppStore();
+  const { state, currentUser, firebaseUser, authLoading, needsRegistration, isAdmin, signOut, saveStatus } = useAppStore();
   const now = new Date();
   const [tab, setTab] = useState<Tab>('schedule');
   const [year, setYear] = useState(now.getFullYear());
@@ -133,15 +193,17 @@ function App() {
     setMonth(m);
   };
 
-  // Show login screen if not signed in (allow loading state to show login screen too)
-  if (!isGoogleSignedIn && cloudSyncStatus !== 'loading') {
-    return <LoginScreen />;
-  }
+  // 1. Loading
+  if (authLoading) return <LoginScreen />;
 
-  // Show loading screen while data is being loaded after sign-in
-  if (cloudSyncStatus === 'loading') {
-    return <LoginScreen />;
-  }
+  // 2. Not signed in
+  if (!firebaseUser) return <LoginScreen />;
+
+  // 3. Needs doctor name matching
+  if (needsRegistration) return <DoctorMatchScreen />;
+
+  // 4. Signed in but no profile (doctor deleted)
+  if (!currentUser) return <BlockedScreen />;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -150,8 +212,15 @@ function App() {
         <div className="max-w-6xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between">
           <h1 className="text-sm sm:text-lg font-bold">24시 열린의원</h1>
           <div className="flex items-center gap-2">
-            <CloudSyncButton />
-            <span className="text-xs sm:text-sm text-gray-400">{state.branchName}점</span>
+            <SaveButton />
+            <span className="text-xs sm:text-sm text-gray-400">{currentUser.doctorName}</span>
+            {isAdmin && <span className="text-[9px] bg-yellow-600 text-white px-1.5 py-0.5 rounded">관리자</span>}
+            <button
+              onClick={signOut}
+              className="text-[10px] sm:text-xs text-gray-500 hover:text-gray-300 px-1"
+            >
+              로그아웃
+            </button>
           </div>
         </div>
       </header>
