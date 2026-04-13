@@ -87,12 +87,21 @@ export async function saveAppData(data: Record<string, unknown>): Promise<boolea
 
 // --- Availability ---
 
+export type SlotStatus = 'available' | 'unavailable';
+
+export interface DaySlotAvailability {
+  morning?: SlotStatus;
+  afternoon?: SlotStatus;
+  evening?: SlotStatus;
+  note?: string;
+}
+
 export interface AvailabilityData {
   doctorId: string;
   month: string;
-  availableDays: string[];
-  unavailableDays: string[];
-  submittedAt: number;
+  days: Record<string, DaySlotAvailability>; // key: YYYY-MM-DD
+  submittedAt: number | null; // null = draft
+  isDraft: boolean;
 }
 
 export async function saveAvailability(doctorId: string, month: string, data: AvailabilityData): Promise<boolean> {

@@ -7,7 +7,7 @@ import {
   getUserProfile, setUserProfile, updateUserRole, deleteUserProfile, getAllUsers,
   loadAppData, saveAppData, updateUserProfileField,
   saveAvailability, loadAvailability, loadAllAvailability,
-  type User, type UserProfile, type AvailabilityData,
+  type User, type UserProfile, type AvailabilityData, type DaySlotAvailability,
 } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -72,7 +72,7 @@ interface AppContextType {
   removeMyMonthlyRate: (month: string) => Promise<void>;
 
   // Availability
-  submitMyAvailability: (month: string, available: string[], unavailable: string[]) => Promise<boolean>;
+  submitMyAvailability: (month: string, days: Record<string, DaySlotAvailability>, isDraft: boolean) => Promise<boolean>;
   loadMyAvailability: (month: string) => Promise<AvailabilityData | null>;
   loadAllAvailabilityForMonth: (month: string) => Promise<AvailabilityData[]>;
 
@@ -463,14 +463,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // --- Availability ---
 
-  const submitMyAvailability = useCallback(async (month: string, available: string[], unavailable: string[]): Promise<boolean> => {
+  const submitMyAvailability = useCallback(async (month: string, days: Record<string, DaySlotAvailability>, isDraft: boolean): Promise<boolean> => {
     if (!currentUser) return false;
     return saveAvailability(currentUser.doctorId, month, {
       doctorId: currentUser.doctorId,
       month,
-      availableDays: available,
-      unavailableDays: unavailable,
-      submittedAt: Date.now(),
+      days,
+      submittedAt: isDraft ? null : Date.now(),
+      isDraft,
     });
   }, [currentUser]);
 
