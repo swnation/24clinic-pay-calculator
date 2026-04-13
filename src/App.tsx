@@ -82,18 +82,25 @@ function LoginScreen() {
 }
 
 function DoctorMatchScreen() {
-  const { state, registerUser, signOut } = useAppStore();
+  const { registerUser, signOut } = useAppStore();
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) return;
     setError('');
+    setConfirming(true);
+  };
+
+  const handleConfirm = async () => {
     setLoading(true);
     const result = await registerUser(name);
     if (!result.success) {
       setError(result.error || '등록에 실패했습니다.');
+      setConfirming(false);
     }
     setLoading(false);
   };
@@ -105,43 +112,64 @@ function DoctorMatchScreen() {
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
             <h1 className="text-xl font-bold text-gray-900 mb-1 text-center">의사 이름 확인</h1>
             <p className="text-sm text-gray-400 mb-6 text-center">
-              본인의 이름을 한글로 입력해주세요.
+              본인의 이름을 한글로 정확히 입력해주세요.
             </p>
 
-            <form onSubmit={handleSubmit}>
-              <input
-                type="text"
-                value={name}
-                onChange={e => { setName(e.target.value); setError(''); }}
-                placeholder="예: 홍길동"
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoFocus
-                disabled={loading}
-              />
+            {!confirming ? (
+              <form onSubmit={handleSubmit}>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => { setName(e.target.value); setError(''); }}
+                  placeholder="이름 입력"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                />
 
-              {error && (
-                <p className="text-sm text-red-500 mb-3">{error}</p>
-              )}
+                {error && (
+                  <p className="text-sm text-red-500 mb-3">{error}</p>
+                )}
 
-              <div className="text-xs text-gray-400 mb-4">
-                <p className="mb-1">현재 근무중인 의사:</p>
-                <div className="flex flex-wrap gap-1">
-                  {state.doctors.map(d => (
-                    <span key={d.id} className="px-2 py-0.5 rounded-full text-[11px]" style={{ backgroundColor: d.color }}>
-                      {d.name}
-                    </span>
-                  ))}
+                <button
+                  type="submit"
+                  disabled={!name.trim()}
+                  className="w-full bg-blue-600 text-white rounded-lg px-4 py-3 text-sm font-medium active:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500"
+                >
+                  다음
+                </button>
+              </form>
+            ) : (
+              <div>
+                <div className="bg-gray-50 rounded-lg p-4 mb-4 text-center">
+                  <p className="text-sm text-gray-500 mb-1">입력한 이름</p>
+                  <p className="text-xl font-bold text-gray-900">{name.trim()}</p>
+                </div>
+                <p className="text-sm text-gray-500 mb-4 text-center">
+                  이 이름으로 계정을 연결합니다.<br />한 번 연결하면 변경할 수 없습니다.
+                </p>
+
+                {error && (
+                  <p className="text-sm text-red-500 mb-3">{error}</p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConfirming(false)}
+                    disabled={loading}
+                    className="flex-1 bg-gray-100 text-gray-700 rounded-lg px-4 py-3 text-sm font-medium active:bg-gray-200"
+                  >
+                    수정
+                  </button>
+                  <button
+                    onClick={handleConfirm}
+                    disabled={loading}
+                    className="flex-1 bg-blue-600 text-white rounded-lg px-4 py-3 text-sm font-medium active:bg-blue-700 disabled:bg-gray-400"
+                  >
+                    {loading ? '확인 중...' : '확인'}
+                  </button>
                 </div>
               </div>
-
-              <button
-                type="submit"
-                disabled={loading || !name.trim()}
-                className="w-full bg-blue-600 text-white rounded-lg px-4 py-3 text-sm font-medium active:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500"
-              >
-                {loading ? '확인 중...' : '확인'}
-              </button>
-            </form>
+            )}
 
             <button
               onClick={signOut}
