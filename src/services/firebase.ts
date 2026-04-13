@@ -8,12 +8,12 @@ import { getFirestore, doc, getDoc, setDoc, deleteDoc, getDocs, collection } fro
 // 3. Firestore Database 생성 (test mode로 시작)
 // 4. 프로젝트 설정 > 일반 > 웹 앱 추가 > config 복사
 const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
+  apiKey: "AIzaSyAHstAXzlNXuASznOeWoruZYNF_S3sRDYk",
+  authDomain: "clinic-schedule-calc.firebaseapp.com",
+  projectId: "clinic-schedule-calc",
+  storageBucket: "clinic-schedule-calc.firebasestorage.app",
+  messagingSenderId: "185031215692",
+  appId: "1:185031215692:web:b83e41c93b0a01c85ac2e9",
 };
 
 const app = initializeApp(firebaseConfig);
