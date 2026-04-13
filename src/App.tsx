@@ -182,7 +182,7 @@ function BlockedScreen() {
 }
 
 function App() {
-  const { state, currentUser, firebaseUser, authLoading, needsRegistration, isAdmin, signOut, saveStatus } = useAppStore();
+  const { currentUser, firebaseUser, authLoading, needsRegistration, isAdmin, signOut } = useAppStore();
   const now = new Date();
   const [tab, setTab] = useState<Tab>('schedule');
   const [year, setYear] = useState(now.getFullYear());

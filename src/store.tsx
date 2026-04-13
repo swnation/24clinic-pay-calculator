@@ -111,7 +111,7 @@ function parseLoadedData(data: Record<string, unknown>): AppState {
   const mergedRates = { ...DEFAULT_RATES };
   if (parsed?.defaultRates && typeof parsed.defaultRates === 'object') {
     for (const key of Object.keys(DEFAULT_RATES) as Array<keyof typeof DEFAULT_RATES>) {
-      const storedValue = (parsed.defaultRates as Record<string, unknown>)[key];
+      const storedValue = (parsed.defaultRates as unknown as Record<string, unknown>)[key];
       if (typeof storedValue === 'number') mergedRates[key] = storedValue;
     }
   }
