@@ -71,6 +71,7 @@ export default function Settings() {
     setDefaultRates, addSpecialRatePeriod, removeSpecialRatePeriod,
     toggleHoliday, setBranchName,
     googleClientId, setGoogleClientId,
+    importData, resetData,
   } = useAppStore();
 
   const [newDoctorName, setNewDoctorName] = useState('');
@@ -447,8 +448,7 @@ export default function Settings() {
                 reader.onload = () => {
                   try {
                     const data = JSON.parse(reader.result as string);
-                    localStorage.setItem('24clinic-pay-calculator-state', JSON.stringify(data));
-                    window.location.reload();
+                    importData(data);
                   } catch {
                     alert('잘못된 파일 형식입니다.');
                   }
@@ -460,8 +460,7 @@ export default function Settings() {
           <button
             onClick={() => {
               if (confirm('모든 데이터를 초기화하시겠습니까?')) {
-                localStorage.removeItem('24clinic-pay-calculator-state');
-                window.location.reload();
+                resetData();
               }
             }}
             className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm hover:bg-red-100"

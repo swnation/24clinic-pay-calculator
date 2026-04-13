@@ -33,6 +33,8 @@ interface AppContextType {
   setBranchName: (name: string) => void;
   getShiftsForMonth: (month: string) => Shift[];
   getShiftsForDoctor: (doctorId: string, month: string) => Shift[];
+  importData: (data: Record<string, unknown>) => void;
+  resetData: () => void;
   // Google Drive sync
   googleClientId: string;
   setGoogleClientId: (id: string) => void;
@@ -44,7 +46,7 @@ interface AppContextType {
   cloudSyncStatus: 'idle' | 'saving' | 'loading' | 'success' | 'error';
 }
 
-const STORAGE_KEY = '24clinic-pay-calculator-state';
+const CLIENT_ID_KEY = '24clinic-google-client-id';
 
 const defaultDoctors: Doctor[] = [
   { id: 'd3', name: '유성우', color: '#E0E0E0' },
@@ -88,38 +90,23 @@ const defaultState: AppState = {
   branchName: '잠실',
 };
 
-function loadState(): AppState {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Pick only valid keys from stored rates with type checking
-      const mergedRates = { ...DEFAULT_RATES };
-      if (parsed?.defaultRates && typeof parsed.defaultRates === 'object') {
-        for (const key of Object.keys(DEFAULT_RATES) as Array<keyof typeof DEFAULT_RATES>) {
-          const storedValue = parsed.defaultRates[key];
-          if (typeof storedValue === 'number') mergedRates[key] = storedValue;
-        }
-      }
-      return {
-        ...defaultState,
-        ...parsed,
-        defaultRates: mergedRates,
-        // Ensure new fields exist even if stored data is old
-        branchMonthlyRates: parsed.branchMonthlyRates || presetBranchMonthlyRates,
-        specialRatePeriods: parsed.specialRatePeriods || [],
-        // 유성우(본인)를 항상 첫 번째로
-        doctors: [...(parsed.doctors || defaultDoctors)].sort((a: Doctor) => a.name === '유성우' ? -1 : 0),
-      };
+function parseLoadedData(data: Record<string, unknown>): AppState {
+  const parsed = data as Partial<AppState>;
+  const mergedRates = { ...DEFAULT_RATES };
+  if (parsed?.defaultRates && typeof parsed.defaultRates === 'object') {
+    for (const key of Object.keys(DEFAULT_RATES) as Array<keyof typeof DEFAULT_RATES>) {
+      const storedValue = (parsed.defaultRates as Record<string, unknown>)[key];
+      if (typeof storedValue === 'number') mergedRates[key] = storedValue;
     }
-  } catch {
-    // ignore
   }
-  return defaultState;
-}
-
-function saveState(state: AppState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  return {
+    ...defaultState,
+    ...parsed,
+    defaultRates: mergedRates,
+    branchMonthlyRates: parsed.branchMonthlyRates || presetBranchMonthlyRates,
+    specialRatePeriods: parsed.specialRatePeriods || [],
+    doctors: [...(parsed.doctors || defaultDoctors)].sort((a: Doctor) => a.name === '유성우' ? -1 : 0),
+  };
 }
 
 let nextId = Date.now();
@@ -130,10 +117,9 @@ function genId(): string {
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AppState>(loadState);
+  const [state, setState] = useState<AppState>(defaultState);
 
-  // Google Drive sync state (declared early for auto-save useEffect)
-  const CLIENT_ID_KEY = '24clinic-google-client-id';
+  // Google Drive sync state
   const [googleClientId, setGoogleClientIdState] = useState(() => localStorage.getItem(CLIENT_ID_KEY) || '');
   const [isGoogleSignedInState, setIsGoogleSignedIn] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'saving' | 'loading' | 'success' | 'error'>('idle');
@@ -141,10 +127,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadDone = useRef(false);
-
-  useEffect(() => {
-    saveState(state);
-  }, [state]);
 
   // Auto-save to Google Drive (debounced)
   useEffect(() => {
@@ -217,7 +199,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     monthsToReplace: string[]
   ) => {
     setState(s => {
-      // Build name -> doctor map, creating new doctors as needed
       const nameToId = new Map<string, string>();
       const usedColors = new Set(s.doctors.map(d => d.color));
       const newDoctors: Doctor[] = [];
@@ -234,12 +215,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Remove existing shifts for replaced months
       const filteredShifts = monthsToReplace.length > 0
         ? s.shifts.filter(sh => !monthsToReplace.some(mp => sh.date.startsWith(mp)))
         : s.shifts;
 
-      // Create new shift objects with resolved doctorIds
       const newShifts: Shift[] = shifts.map(sh => ({
         id: genId(),
         doctorId: nameToId.get(sh.doctorName)!,
@@ -320,6 +299,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return state.shifts.filter(s => s.doctorId === doctorId && s.date.startsWith(month));
   };
 
+  const importData = (data: Record<string, unknown>) => {
+    setState(parseLoadedData(data));
+    // If signed in, immediately save imported data to Drive
+    if (isSignedIn()) {
+      initialLoadDone.current = true;
+    }
+  };
+
+  const resetData = () => {
+    setState(defaultState);
+  };
+
   // Google Drive sync actions
   const setGoogleClientId = (id: string) => {
     localStorage.setItem(CLIENT_ID_KEY, id);
@@ -336,8 +327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const data = await loadFromDrive();
         if (data) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-          setState(loadState());
+          setState(parseLoadedData(data));
           initialLoadDone.current = true;
           setCloudSyncStatus('success');
           if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
@@ -388,8 +378,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setTimeout(() => setCloudSyncStatus('idle'), 2000);
         return false;
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      setState(loadState());
+      setState(parseLoadedData(data));
+      initialLoadDone.current = true;
       setCloudSyncStatus('success');
       setTimeout(() => setCloudSyncStatus('idle'), 2000);
       return true;
@@ -411,6 +401,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleHoliday, setCustomHolidays,
       setBranchName,
       getShiftsForMonth, getShiftsForDoctor,
+      importData, resetData,
       googleClientId, setGoogleClientId,
       isGoogleSignedIn: isGoogleSignedInState,
       googleSignIn, googleSignOut,
