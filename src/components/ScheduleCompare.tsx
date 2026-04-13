@@ -27,6 +27,9 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'screenshot' | 'parsed' | 'overlay'>('screenshot');
   const [overlayOpacity, setOverlayOpacity] = useState(0.5);
+  const [overlayScale, setOverlayScale] = useState(1);
+  const [overlayOffset, setOverlayOffset] = useState({ x: 0, y: 0 });
+  const [diffMode, setDiffMode] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -101,7 +104,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
   const timeSlots: TimeSlotKey[] = ['morning', 'afternoon', 'evening'];
 
-  const renderShiftBadge = (s: Shift) => {
+  const renderShiftBadge = (s: Shift, transparent = false) => {
     const dimmed = filterDoctor !== 'all' && s.doctorId !== filterDoctor;
     return (
       <div
@@ -109,26 +112,29 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
         className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[2px] rounded-sm whitespace-nowrap overflow-hidden ${dimmed ? 'opacity-15' : ''}`}
         style={{ backgroundColor: getDoctorColor(s.doctorId) }}
       >
-        <span className="font-medium">{getDoctorName(s.doctorId)}</span>
-        <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
+        <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
+        <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
       </div>
     );
   };
 
-  const fixedGridCalendar = (
+  const renderCalendar = (transparent = false) => (
     <div className="overflow-x-auto">
-      <div className="grid grid-cols-7 border-t border-l border-gray-400 min-w-[840px]">
+      <div className={`grid grid-cols-7 min-w-[840px] ${transparent ? '' : 'border-t border-l border-gray-400'}`}>
         {/* Day headers */}
         {dayNames.map((name, i) => (
-          <div key={name} className={`text-center text-xs font-bold py-1.5 border-b border-r border-gray-400 ${
-            i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
+          <div key={name} className={`text-center text-xs font-bold py-1.5 ${transparent
+            ? 'text-transparent select-none'
+            : `border-b border-r border-gray-400 ${
+              i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
+            }`
           }`}>{name}</div>
         ))}
 
         {/* Day cells with fixed 3-row × 2-column grid */}
         {calendarDays.map((day, idx) => {
           if (day === null) {
-            return <div key={`e-${idx}`} className="border-b border-r border-gray-300 bg-white h-[110px]" />;
+            return <div key={`e-${idx}`} className={`h-[110px] ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`} />;
           }
           const dateStr = `${year}-${pad(month)}-${pad(day)}`;
           const isHolSun = isHolidayOrSunday(dateStr, state.customHolidays);
@@ -138,9 +144,9 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           const hasRoom2 = monthHasRoom2;
 
           return (
-            <div key={dateStr} className="border-b border-r border-gray-300 bg-white h-[110px] p-0.5">
+            <div key={dateStr} className={`h-[110px] p-0.5 ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
               {/* Date number */}
-              <div className="flex items-baseline gap-0.5 mb-0.5">
+              <div className={`flex items-baseline gap-0.5 mb-0.5 ${transparent ? 'invisible' : ''}`}>
                 <span className={`font-bold text-[11px] ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
                 {holiday && <span className="text-[7px] text-red-500">{holiday}</span>}
               </div>
@@ -151,13 +157,13 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                   const r1 = dayData?.[slot]?.room1 || [];
                   const r2 = dayData?.[slot]?.room2 || [];
                   return (
-                    <div key={slot} className={`flex min-h-[24px] ${slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
+                    <div key={slot} className={`flex min-h-[24px] ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
                       <div className="flex-1 py-0.5 px-0.5">
-                        {r1.map(renderShiftBadge)}
+                        {r1.map(s => renderShiftBadge(s, transparent))}
                       </div>
                       {hasRoom2 && (
-                        <div className="flex-1 border-l border-dashed border-gray-300 py-0.5 px-0.5">
-                          {r2.map(renderShiftBadge)}
+                        <div className={`flex-1 py-0.5 px-0.5 ${!transparent ? 'border-l border-dashed border-gray-300' : ''}`}>
+                          {r2.map(s => renderShiftBadge(s, transparent))}
                         </div>
                       )}
                     </div>
@@ -170,6 +176,8 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
       </div>
     </div>
   );
+
+  const hasOffsetOrScale = overlayScale !== 1 || overlayOffset.x !== 0 || overlayOffset.y !== 0;
 
   return (
     <div ref={containerRef}>
@@ -274,7 +282,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
       {/* Parsed data mode - fixed grid */}
       {viewMode === 'parsed' && (
         <div className="border border-gray-300 rounded-lg overflow-auto">
-          {shifts.length > 0 ? fixedGridCalendar : (
+          {shifts.length > 0 ? renderCalendar(false) : (
             <p className="text-sm text-gray-500 text-center py-8">
               이 달에 파싱된 근무가 없습니다.<br />스케줄 탭에서 먼저 붙여넣기 해주세요.
             </p>
@@ -285,26 +293,109 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
       {/* Overlay mode - screenshot + parsed layered */}
       {viewMode === 'overlay' && image && (
         <div>
-          <div className="flex items-center gap-3 mb-3 px-2">
-            <span className="text-xs text-gray-500 whitespace-nowrap">원본</span>
-            <input
-              type="range" min="0" max="1" step="0.05"
-              value={overlayOpacity}
-              onChange={e => setOverlayOpacity(Number(e.target.value))}
-              className="flex-1 h-2 accent-blue-600"
-            />
-            <span className="text-xs text-gray-500 whitespace-nowrap">파싱</span>
+          <div className="space-y-2 mb-3 px-2">
+            {/* Opacity slider */}
+            <div className={`flex items-center gap-3 ${diffMode ? 'opacity-30 pointer-events-none' : ''}`}>
+              <span className="text-xs text-gray-500 whitespace-nowrap w-8">원본</span>
+              <input
+                type="range" min="0" max="1" step="0.05"
+                value={overlayOpacity}
+                onChange={e => setOverlayOpacity(Number(e.target.value))}
+                className="flex-1 h-2 accent-blue-600"
+              />
+              <span className="text-xs text-gray-500 whitespace-nowrap w-8">파싱</span>
+            </div>
+
+            {/* Scale slider */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500 whitespace-nowrap w-8">크기</span>
+              <input
+                type="range" min="0.3" max="2.5" step="0.01"
+                value={overlayScale}
+                onChange={e => setOverlayScale(Number(e.target.value))}
+                className="flex-1 h-2 accent-purple-600"
+              />
+              <span className="text-xs text-gray-500 whitespace-nowrap w-8 text-right">{Math.round(overlayScale * 100)}%</span>
+            </div>
+
+            {/* Position sliders (shown in diff mode or when offset is non-zero) */}
+            {(diffMode || hasOffsetOrScale) && (
+              <>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 whitespace-nowrap w-8">좌우</span>
+                  <input
+                    type="range" min="-300" max="300" step="1"
+                    value={overlayOffset.x}
+                    onChange={e => setOverlayOffset(o => ({ ...o, x: Number(e.target.value) }))}
+                    className="flex-1 h-2 accent-green-600"
+                  />
+                  <span className="text-xs text-gray-500 w-8 text-right">{overlayOffset.x}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 whitespace-nowrap w-8">상하</span>
+                  <input
+                    type="range" min="-300" max="300" step="1"
+                    value={overlayOffset.y}
+                    onChange={e => setOverlayOffset(o => ({ ...o, y: Number(e.target.value) }))}
+                    className="flex-1 h-2 accent-green-600"
+                  />
+                  <span className="text-xs text-gray-500 w-8 text-right">{overlayOffset.y}</span>
+                </div>
+              </>
+            )}
+
+            {/* Diff mode toggle + reset */}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setDiffMode(!diffMode)}
+                className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
+                  diffMode
+                    ? 'bg-red-50 border-red-300 text-red-700'
+                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                차이점 보기
+              </button>
+              {hasOffsetOrScale && (
+                <button
+                  onClick={() => { setOverlayScale(1); setOverlayOffset({ x: 0, y: 0 }); }}
+                  className="px-2 py-1 text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                >
+                  위치/크기 초기화
+                </button>
+              )}
+            </div>
           </div>
-          <div className="relative border border-gray-300 rounded-lg overflow-auto">
+
+          {/* Overlay container */}
+          <div
+            className="relative border border-gray-300 rounded-lg overflow-auto select-none"
+            style={{ isolation: 'isolate' }}
+          >
             {/* Screenshot layer */}
-            <div style={{ opacity: 1 - overlayOpacity }}>
-              <img src={image} alt="원본" className="w-full" />
+            <div style={{ opacity: diffMode ? 1 : (1 - overlayOpacity) }}>
+              <img src={image} alt="원본" className="w-full" draggable={false} />
             </div>
             {/* Parsed layer */}
-            <div className="absolute inset-0" style={{ opacity: overlayOpacity }}>
-              {fixedGridCalendar}
+            <div
+              className="absolute inset-0"
+              style={{
+                opacity: diffMode ? 1 : overlayOpacity,
+                mixBlendMode: diffMode ? 'difference' : 'normal',
+                transform: `translate(${overlayOffset.x}px, ${overlayOffset.y}px) scale(${overlayScale})`,
+                transformOrigin: 'top left',
+                pointerEvents: 'none',
+              }}
+            >
+              {renderCalendar(diffMode)}
             </div>
           </div>
+
+          {diffMode && (
+            <p className="text-xs text-gray-400 text-center mt-2">
+              같은 색 = 검정(일치) / 밝은 색 = 차이 | 크기와 위치를 맞춘 뒤 비교하세요
+            </p>
+          )}
         </div>
       )}
 
