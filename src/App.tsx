@@ -5,11 +5,13 @@ import WageSummary from './components/WageSummary';
 import CalendarExport from './components/CalendarExport';
 import ScheduleCompare from './components/ScheduleCompare';
 import Settings from './components/Settings';
+import Availability from './components/Availability';
 import { useAppStore } from './store';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'schedule', label: '스케줄' },
   { key: 'wage', label: '급여계산' },
+  { key: 'availability', label: '가능일' },
   { key: 'compare', label: '비교' },
   { key: 'export', label: '캘린더' },
   { key: 'settings', label: '설정' },
@@ -279,6 +281,9 @@ function App() {
         )}
         {tab === 'wage' && (
           <WageSummary year={year} month={month} onMonthChange={handleMonthChange} />
+        )}
+        {tab === 'availability' && (
+          <Availability year={year} month={month} onMonthChange={handleMonthChange} />
         )}
         {tab === 'compare' && (
           <ScheduleCompare year={year} month={month} onMonthChange={handleMonthChange} />

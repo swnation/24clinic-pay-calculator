@@ -5,8 +5,9 @@ import { getKoreanHolidaysForYear } from './utils/holidays';
 import {
   auth, signInWithGoogle, signOutGoogle,
   getUserProfile, setUserProfile, updateUserRole, deleteUserProfile, getAllUsers,
-  loadAppData, saveAppData,
-  type User, type UserProfile,
+  loadAppData, saveAppData, updateUserProfileField,
+  saveAvailability, loadAvailability, loadAllAvailability,
+  type User, type UserProfile, type AvailabilityData,
 } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -54,11 +55,26 @@ interface AppContextType {
   signOut: () => void;
   registerUser: (doctorName: string) => Promise<{ success: boolean; error?: string }>;
 
+  // Doctor management (admin)
+  archiveDoctor: (id: string) => void;
+  restoreDoctor: (id: string) => void;
+  activeDoctors: Doctor[];
+
   // User management (admin)
   allUsers: { uid: string; profile: UserProfile }[];
   refreshUsers: () => Promise<void>;
   setRole: (uid: string, role: 'admin' | 'doctor') => Promise<void>;
   removeUser: (uid: string) => Promise<void>;
+
+  // Personal rates
+  updateMyRates: (rates: Partial<RatesBySlot>) => Promise<void>;
+  updateMyMonthlyRate: (month: string, rates: Partial<RatesBySlot>) => Promise<void>;
+  removeMyMonthlyRate: (month: string) => Promise<void>;
+
+  // Availability
+  submitMyAvailability: (month: string, available: string[], unavailable: string[]) => Promise<boolean>;
+  loadMyAvailability: (month: string) => Promise<AvailabilityData | null>;
+  loadAllAvailabilityForMonth: (month: string) => Promise<AvailabilityData[]>;
 
   // Save
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
@@ -355,8 +371,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const trimmed = doctorName.trim();
     if (!trimmed) return { success: false, error: '이름을 입력해주세요.' };
 
-    // Find matching active doctor
-    const doctor = state.doctors.find(d => d.name === trimmed);
+    // Find matching active (non-archived) doctor
+    const doctor = state.doctors.find(d => d.name === trimmed && !d.archived);
     if (!doctor) return { success: false, error: '근무중인 의사 목록에 없는 이름입니다.' };
 
     // Check if doctor is already claimed
@@ -406,6 +422,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAllUsers(prev => prev.filter(u => u.uid !== uid));
   }, []);
 
+  // --- Doctor management ---
+
+  const archiveDoctor = (id: string) => {
+    setState(s => ({ ...s, doctors: s.doctors.map(d => d.id === id ? { ...d, archived: true } : d) }));
+  };
+
+  const restoreDoctor = (id: string) => {
+    setState(s => ({ ...s, doctors: s.doctors.map(d => d.id === id ? { ...d, archived: false } : d) }));
+  };
+
+  const activeDoctors = state.doctors.filter(d => !d.archived);
+
+  // --- Personal rates ---
+
+  const updateMyRates = useCallback(async (rates: Partial<RatesBySlot>) => {
+    if (!firebaseUser || !currentUser) return;
+    const personalRates = { ...currentUser.personalRates, ...rates } as Record<string, number>;
+    await updateUserProfileField(firebaseUser.uid, { personalRates });
+    setCurrentUser(prev => prev ? { ...prev, personalRates } : prev);
+  }, [firebaseUser, currentUser]);
+
+  const updateMyMonthlyRate = useCallback(async (month: string, rates: Partial<RatesBySlot>) => {
+    if (!firebaseUser || !currentUser) return;
+    const existing = currentUser.personalMonthlyRates || [];
+    const idx = existing.findIndex(r => r.month === month);
+    const updated = [...existing];
+    if (idx >= 0) updated[idx] = { month, rates: rates as Record<string, number> };
+    else updated.push({ month, rates: rates as Record<string, number> });
+    await updateUserProfileField(firebaseUser.uid, { personalMonthlyRates: updated });
+    setCurrentUser(prev => prev ? { ...prev, personalMonthlyRates: updated } : prev);
+  }, [firebaseUser, currentUser]);
+
+  const removeMyMonthlyRate = useCallback(async (month: string) => {
+    if (!firebaseUser || !currentUser) return;
+    const updated = (currentUser.personalMonthlyRates || []).filter(r => r.month !== month);
+    await updateUserProfileField(firebaseUser.uid, { personalMonthlyRates: updated });
+    setCurrentUser(prev => prev ? { ...prev, personalMonthlyRates: updated } : prev);
+  }, [firebaseUser, currentUser]);
+
+  // --- Availability ---
+
+  const submitMyAvailability = useCallback(async (month: string, available: string[], unavailable: string[]): Promise<boolean> => {
+    if (!currentUser) return false;
+    return saveAvailability(currentUser.doctorId, month, {
+      doctorId: currentUser.doctorId,
+      month,
+      availableDays: available,
+      unavailableDays: unavailable,
+      submittedAt: Date.now(),
+    });
+  }, [currentUser]);
+
+  const loadMyAvailability = useCallback(async (month: string) => {
+    if (!currentUser) return null;
+    return loadAvailability(currentUser.doctorId, month);
+  }, [currentUser]);
+
+  const loadAllAvailabilityForMonth = useCallback(async (month: string) => {
+    return loadAllAvailability(month);
+  }, []);
+
   // --- Save ---
 
   const saveNow = useCallback(async () => {
@@ -432,7 +509,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       importData, resetData,
       firebaseUser, currentUser, authLoading, needsRegistration, isAdmin,
       signIn, signOut, registerUser,
+      archiveDoctor, restoreDoctor, activeDoctors,
       allUsers, refreshUsers, setRole, removeUser,
+      updateMyRates, updateMyMonthlyRate, removeMyMonthlyRate,
+      submitMyAvailability, loadMyAvailability, loadAllAvailabilityForMonth,
       saveStatus, saveNow,
     }}>
       {children}

@@ -15,6 +15,24 @@ export function getEffectiveRates(
   };
 }
 
+// Priority: personal monthly > personal default > branch monthly > default
+export function getEffectiveRatesWithPersonal(
+  month: string,
+  defaultRates: RatesBySlot,
+  branchMonthlyRates: BranchMonthlyRate[],
+  personalRates?: Record<string, number>,
+  personalMonthlyRates?: { month: string; rates: Record<string, number> }[]
+): RatesBySlot {
+  const branchRate = branchMonthlyRates.find(r => r.month === month);
+  const personalMonthly = personalMonthlyRates?.find(r => r.month === month);
+  return {
+    ...defaultRates,
+    ...branchRate?.rates,
+    ...personalRates,
+    ...personalMonthly?.rates,
+  } as RatesBySlot;
+}
+
 function isBreakHour(h: number): boolean {
   return h === 13 || h === 18;
 }

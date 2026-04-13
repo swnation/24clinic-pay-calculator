@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, type User } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, deleteDoc, getDocs, collection } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, getDocs, collection, query, where } from 'firebase/firestore';
 
 // TODO: Firebase Console에서 프로젝트 생성 후 아래 값을 채워주세요
 // 1. https://console.firebase.google.com 에서 프로젝트 생성
@@ -43,6 +43,8 @@ export interface UserProfile {
   doctorName: string;
   role: 'admin' | 'doctor';
   createdAt: number;
+  personalRates?: Record<string, number>;
+  personalMonthlyRates?: { month: string; rates: Record<string, number> }[];
 }
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
@@ -81,4 +83,40 @@ export async function saveAppData(data: Record<string, unknown>): Promise<boolea
   } catch {
     return false;
   }
+}
+
+// --- Availability ---
+
+export interface AvailabilityData {
+  doctorId: string;
+  month: string;
+  availableDays: string[];
+  unavailableDays: string[];
+  submittedAt: number;
+}
+
+export async function saveAvailability(doctorId: string, month: string, data: AvailabilityData): Promise<boolean> {
+  try {
+    await setDoc(doc(db, 'availability', `${month}_${doctorId}`), data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function loadAvailability(doctorId: string, month: string): Promise<AvailabilityData | null> {
+  const snap = await getDoc(doc(db, 'availability', `${month}_${doctorId}`));
+  return snap.exists() ? (snap.data() as AvailabilityData) : null;
+}
+
+export async function loadAllAvailability(month: string): Promise<AvailabilityData[]> {
+  const q = query(collection(db, 'availability'), where('month', '==', month));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data() as AvailabilityData);
+}
+
+// --- User profile partial update ---
+
+export async function updateUserProfileField(uid: string, data: Partial<UserProfile>): Promise<void> {
+  await setDoc(doc(db, 'users', uid), data, { merge: true });
 }

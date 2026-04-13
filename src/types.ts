@@ -2,6 +2,7 @@ export interface Doctor {
   id: string;
   name: string;
   color: string; // hex background color
+  archived?: boolean;
 }
 
 export interface Shift {
@@ -116,4 +117,4 @@ export const DOCTOR_COLORS = [
   '#CE93D8', '#80CBC4', '#FFAB91', '#A5D6A7', '#B39DDB',
 ];
 
-export type Tab = 'schedule' | 'wage' | 'compare' | 'export' | 'settings';
+export type Tab = 'schedule' | 'wage' | 'availability' | 'compare' | 'export' | 'settings';
