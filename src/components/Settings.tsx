@@ -139,7 +139,7 @@ function PersonalRateEditor() {
 
 // --- User Management (Admin) ---
 function UserManagement() {
-  const { allUsers, activeDoctors, state, refreshUsers, setRole, removeUser, effectiveIsAdmin } = useAppStore();
+  const { allUsers, activeDoctors, state, refreshUsers, setRole, removeUser, effectiveIsAdmin, firebaseUser } = useAppStore();
 
   useEffect(() => {
     if (effectiveIsAdmin) refreshUsers();
@@ -172,12 +172,15 @@ function UserManagement() {
               {profile.role === 'admin' ? '관리자' : '의사'}
             </span>
             <div className="flex gap-1">
-              <button
-                onClick={() => setRole(uid, profile.role === 'admin' ? 'doctor' : 'admin')}
-                className="text-[10px] text-blue-600 hover:underline"
-              >
-                {profile.role === 'admin' ? '의사로' : '관리자로'}
-              </button>
+              {/* 자기 자신을 admin에서 해제할 수 없음 */}
+              {!(uid === firebaseUser?.uid && profile.role === 'admin') && (
+                <button
+                  onClick={() => setRole(uid, profile.role === 'admin' ? 'doctor' : 'admin')}
+                  className="text-[10px] text-blue-600 hover:underline"
+                >
+                  {profile.role === 'admin' ? '의사로' : '관리자로'}
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (confirm(`${profile.doctorName}의 계정 연결을 해제하시겠습니까?`)) {
