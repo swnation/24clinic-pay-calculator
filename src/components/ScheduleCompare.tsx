@@ -27,17 +27,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'screenshot' | 'parsed' | 'overlay'>('screenshot');
   const [overlayOpacity, setOverlayOpacity] = useState(0.5);
-  const [overlayScaleX, setOverlayScaleX] = useState(1);
-  const [overlayScaleY, setOverlayScaleY] = useState(1);
-  const [lockAspect, setLockAspect] = useState(true);
   const [overlayOffset, setOverlayOffset] = useState({ x: 0, y: 0 });
   const [diffMode, setDiffMode] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
-  const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null);
-  const autoFitDone = useRef(false);
 
   // Alignment wizard: 4 clicks (screenshot1, parsed1, screenshot2, parsed2)
   type AlignStep = null | 's1' | 'p1' | 's2' | 'p2';
@@ -65,22 +59,13 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     } else if (alignStep === 's2' && type === 'screenshot') {
       ap.sx2 = x; ap.sy2 = y; setAlignStep('p2');
     } else if (alignStep === 'p2' && type === 'parsed') {
-      // Calculate transform
+      // Calculate offset: average of two point pairs
       const px2 = x; const py2 = y;
-      const dsx = ap.sx2 - ap.sx1;
-      const dsy = ap.sy2 - ap.sy1;
-      const dpx = px2 - ap.px1;
-      const dpy = py2 - ap.py1;
-      if (Math.abs(dpx) > 1 && Math.abs(dpy) > 1) {
-        const sx = dsx / dpx;
-        const sy = dsy / dpy;
-        const ox = ap.sx1 - ap.px1 * sx;
-        const oy = ap.sy1 - ap.py1 * sy;
-        setOverlayScaleX(Math.round(sx * 100) / 100);
-        setOverlayScaleY(Math.round(sy * 100) / 100);
-        setOverlayOffset({ x: Math.round(ox), y: Math.round(oy) });
-        setLockAspect(false);
-      }
+      const ox1 = ap.sx1 - ap.px1;
+      const oy1 = ap.sy1 - ap.py1;
+      const ox2 = ap.sx2 - px2;
+      const oy2 = ap.sy2 - py2;
+      setOverlayOffset({ x: Math.round((ox1 + ox2) / 2), y: Math.round((oy1 + oy2) / 2) });
       setAlignStep(null);
     }
   };
@@ -131,29 +116,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     return days;
   }, [year, month]);
 
-  // Parsed calendar dimensions (min-width 840px, header ~30px + rows * 110px)
   const calRows = Math.ceil(calendarDays.length / 7);
-  const CAL_WIDTH = 840;
-  const CAL_HEIGHT = 30 + calRows * 110;
-
-  // Auto-fit overlay to screenshot dimensions
-  const autoFitToImage = () => {
-    if (!imgDims) return;
-    const sx = imgDims.w / CAL_WIDTH;
-    const sy = imgDims.h / CAL_HEIGHT;
-    setOverlayScaleX(Math.round(sx * 1000) / 1000);
-    setOverlayScaleY(Math.round(sy * 1000) / 1000);
-    setOverlayOffset({ x: 0, y: 0 });
-    setLockAspect(false);
-  };
-
-  // Auto-fit when first entering overlay mode
-  useEffect(() => {
-    if (viewMode === 'overlay' && imgDims && !autoFitDone.current) {
-      autoFitToImage();
-      autoFitDone.current = true;
-    }
-  }, [viewMode, imgDims]);
 
   // Build structured data: date -> { morning/afternoon/evening } -> { room1, room2 }
   const structuredShifts = useMemo(() => {
@@ -180,12 +143,12 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
   const timeSlots: TimeSlotKey[] = ['morning', 'afternoon', 'evening'];
 
-  const renderShiftBadge = (s: Shift, transparent = false) => {
+  const renderShiftBadge = (s: Shift, transparent = false, compact = false) => {
     const dimmed = filterDoctor !== 'all' && s.doctorId !== filterDoctor;
     return (
       <div
         key={s.id}
-        className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[2px] rounded-sm whitespace-nowrap overflow-hidden ${dimmed ? 'opacity-15' : ''}`}
+        className={`${compact ? 'text-[7px] leading-tight px-0.5 py-0' : 'text-[10px] sm:text-[11px] leading-snug px-1 py-[2px]'} rounded-sm whitespace-nowrap overflow-hidden ${dimmed ? 'opacity-15' : ''}`}
         style={{ backgroundColor: getDoctorColor(s.doctorId) }}
       >
         <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
@@ -194,12 +157,16 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     );
   };
 
-  const renderCalendar = (transparent = false) => (
-    <div className="overflow-x-auto">
-      <div className={`grid grid-cols-7 min-w-[840px] ${transparent ? '' : 'border-t border-l border-gray-400'}`}>
+  // fitContainer: cells flex to fill container (for overlay), no fixed sizes
+  const renderCalendar = (transparent = false, fitContainer = false) => (
+    <div className={fitContainer ? 'h-full' : 'overflow-x-auto'}>
+      <div
+        className={`grid grid-cols-7 ${fitContainer ? '' : 'min-w-[840px]'} ${transparent ? '' : 'border-t border-l border-gray-400'}`}
+        style={fitContainer ? { height: '100%', gridTemplateRows: `auto repeat(${calRows}, 1fr)` } : undefined}
+      >
         {/* Day headers */}
         {dayNames.map((name, i) => (
-          <div key={name} className={`text-center text-xs font-bold py-1.5 ${transparent
+          <div key={name} className={`text-center font-bold ${fitContainer ? 'text-[8px] py-0.5' : 'text-xs py-1.5'} ${transparent
             ? 'text-transparent select-none'
             : `border-b border-r border-gray-400 ${
               i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
@@ -207,10 +174,10 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           }`}>{name}</div>
         ))}
 
-        {/* Day cells with fixed 3-row × 2-column grid */}
+        {/* Day cells */}
         {calendarDays.map((day, idx) => {
           if (day === null) {
-            return <div key={`e-${idx}`} className={`h-[110px] ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`} />;
+            return <div key={`e-${idx}`} className={`${fitContainer ? 'min-h-0' : 'h-[110px]'} ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`} />;
           }
           const dateStr = `${year}-${pad(month)}-${pad(day)}`;
           const isHolSun = isHolidayOrSunday(dateStr, state.customHolidays);
@@ -220,26 +187,26 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           const hasRoom2 = monthHasRoom2;
 
           return (
-            <div key={dateStr} className={`h-[110px] p-0.5 ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
+            <div key={dateStr} className={`${fitContainer ? 'min-h-0 overflow-hidden' : 'h-[110px]'} p-0.5 ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
               {/* Date number */}
-              <div className={`flex items-baseline gap-0.5 mb-0.5 ${transparent ? 'invisible' : ''}`}>
-                <span className={`font-bold text-[11px] ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
-                {holiday && <span className="text-[7px] text-red-500">{holiday}</span>}
+              <div className={`flex items-baseline gap-0.5 ${transparent ? 'invisible' : ''}`}>
+                <span className={`font-bold ${fitContainer ? 'text-[8px]' : 'text-[11px]'} ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
+                {holiday && !fitContainer && <span className="text-[7px] text-red-500">{holiday}</span>}
               </div>
 
-              {/* Fixed 3 rows: morning / afternoon / evening with dotted lines */}
-              <div className="flex flex-col">
+              {/* Shift slots */}
+              <div className={`flex flex-col ${fitContainer ? 'gap-0' : ''}`}>
                 {timeSlots.map((slot, slotIdx) => {
                   const r1 = dayData?.[slot]?.room1 || [];
                   const r2 = dayData?.[slot]?.room2 || [];
                   return (
-                    <div key={slot} className={`flex min-h-[24px] ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
+                    <div key={slot} className={`flex ${fitContainer ? 'min-h-0' : 'min-h-[24px]'} ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
                       <div className="flex-1 py-0.5 px-0.5">
-                        {r1.map(s => renderShiftBadge(s, transparent))}
+                        {r1.map(s => renderShiftBadge(s, transparent, fitContainer))}
                       </div>
                       {hasRoom2 && (
                         <div className={`flex-1 py-0.5 px-0.5 ${!transparent ? 'border-l border-dashed border-gray-300' : ''}`}>
-                          {r2.map(s => renderShiftBadge(s, transparent))}
+                          {r2.map(s => renderShiftBadge(s, transparent, fitContainer))}
                         </div>
                       )}
                     </div>
@@ -253,7 +220,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     </div>
   );
 
-  const hasOffsetOrScale = overlayScaleX !== 1 || overlayScaleY !== 1 || overlayOffset.x !== 0 || overlayOffset.y !== 0;
+  const hasOffset = overlayOffset.x !== 0 || overlayOffset.y !== 0;
 
   return (
     <div ref={containerRef}>
@@ -347,14 +314,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                   className="px-2 py-1 text-[11px] bg-red-50 text-red-600 rounded active:bg-red-100">삭제</button>
               </div>
               <div className="border border-gray-300 rounded-lg overflow-auto bg-gray-50">
-                <img
-                  ref={imgRef}
-                  src={image} alt="원본 스케줄" className="w-full"
-                  onLoad={e => {
-                    const el = e.currentTarget;
-                    setImgDims({ w: el.clientWidth, h: el.clientHeight });
-                  }}
-                />
+                <img src={image} alt="원본 스케줄" className="w-full" />
               </div>
             </div>
           )}
@@ -389,121 +349,52 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               <span className="text-xs text-gray-500 whitespace-nowrap w-8">파싱</span>
             </div>
 
-            {/* Scale sliders */}
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-500 whitespace-nowrap w-8">{lockAspect ? '크기' : '가로'}</span>
-              <input
-                type="range" min="0.3" max="2.5" step="0.01"
-                value={overlayScaleX}
-                onChange={e => {
-                  const v = Number(e.target.value);
-                  setOverlayScaleX(v);
-                  if (lockAspect) setOverlayScaleY(v);
-                }}
-                className="flex-1 h-2 accent-purple-600"
-              />
-              <span className="text-xs text-gray-500 whitespace-nowrap w-8 text-right">{Math.round(overlayScaleX * 100)}%</span>
-            </div>
-            {!lockAspect && (
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 whitespace-nowrap w-8">세로</span>
-                <input
-                  type="range" min="0.3" max="2.5" step="0.01"
-                  value={overlayScaleY}
-                  onChange={e => setOverlayScaleY(Number(e.target.value))}
-                  className="flex-1 h-2 accent-pink-500"
-                />
-                <span className="text-xs text-gray-500 whitespace-nowrap w-8 text-right">{Math.round(overlayScaleY * 100)}%</span>
-              </div>
-            )}
-            <div className="flex items-center gap-2 pl-10">
-              <button
-                onClick={() => setLockAspect(!lockAspect)}
-                className={`text-[10px] px-2 py-0.5 rounded border ${lockAspect ? 'bg-purple-50 border-purple-300 text-purple-700' : 'bg-gray-50 border-gray-200 text-gray-500'}`}
-              >
-                {lockAspect ? '비율 고정' : '비율 자유'}
-              </button>
-            </div>
-
-            {/* Position sliders (shown in diff mode or when offset is non-zero) */}
-            {(diffMode || hasOffsetOrScale) && (
+            {/* Position sliders */}
+            {hasOffset && (
               <>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-gray-500 whitespace-nowrap w-8">좌우</span>
-                  <input
-                    type="range" min="-300" max="300" step="1"
-                    value={overlayOffset.x}
+                  <input type="range" min="-300" max="300" step="1" value={overlayOffset.x}
                     onChange={e => setOverlayOffset(o => ({ ...o, x: Number(e.target.value) }))}
-                    className="flex-1 h-2 accent-green-600"
-                  />
+                    className="flex-1 h-2 accent-green-600" />
                   <span className="text-xs text-gray-500 w-8 text-right">{overlayOffset.x}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-gray-500 whitespace-nowrap w-8">상하</span>
-                  <input
-                    type="range" min="-300" max="300" step="1"
-                    value={overlayOffset.y}
+                  <input type="range" min="-300" max="300" step="1" value={overlayOffset.y}
                     onChange={e => setOverlayOffset(o => ({ ...o, y: Number(e.target.value) }))}
-                    className="flex-1 h-2 accent-green-600"
-                  />
+                    className="flex-1 h-2 accent-green-600" />
                   <span className="text-xs text-gray-500 w-8 text-right">{overlayOffset.y}</span>
                 </div>
               </>
             )}
 
-            {/* Diff mode + auto-align + help + reset */}
+            {/* Buttons */}
             <div className="flex items-center justify-between flex-wrap gap-1">
               <div className="flex gap-1">
                 <button
                   onClick={() => setDiffMode(!diffMode)}
                   className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
-                    diffMode
-                      ? 'bg-red-50 border-red-300 text-red-700'
-                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    diffMode ? 'bg-red-50 border-red-300 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
                   }`}
-                >
-                  차이점 보기
-                </button>
-                <button
-                  onClick={autoFitToImage}
-                  disabled={!imgDims}
-                  className="px-3 py-1.5 text-[11px] font-medium rounded-md border bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30"
-                >
-                  원본에 맞추기
-                </button>
+                >차이점 보기</button>
                 <button
                   onClick={() => { setAlignStep('s1'); }}
                   className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
-                    alignStep
-                      ? 'bg-blue-50 border-blue-300 text-blue-700'
-                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    alignStep ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
                   }`}
-                >
-                  {alignStep ? '맞추는 중...' : '기준점 맞추기'}
-                </button>
-                <button
-                  onClick={() => setShowHelp(!showHelp)}
-                  className="px-2 py-1.5 text-[11px] text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md"
-                >
-                  ?
-                </button>
+                >{alignStep ? '맞추는 중...' : '기준점 맞추기'}</button>
+                <button onClick={() => setShowHelp(!showHelp)}
+                  className="px-2 py-1.5 text-[11px] text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md">?</button>
               </div>
               <div className="flex gap-1">
                 {alignStep && (
-                  <button
-                    onClick={() => setAlignStep(null)}
-                    className="px-2 py-1 text-[11px] text-red-500 hover:bg-red-50 rounded"
-                  >
-                    취소
-                  </button>
+                  <button onClick={() => setAlignStep(null)}
+                    className="px-2 py-1 text-[11px] text-red-500 hover:bg-red-50 rounded">취소</button>
                 )}
-                {hasOffsetOrScale && (
-                  <button
-                    onClick={() => { setOverlayScaleX(1); setOverlayScaleY(1); setOverlayOffset({ x: 0, y: 0 }); }}
-                    className="px-2 py-1 text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
-                  >
-                    위치/크기 초기화
-                  </button>
+                {hasOffset && (
+                  <button onClick={() => setOverlayOffset({ x: 0, y: 0 })}
+                    className="px-2 py-1 text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded">위치 초기화</button>
                 )}
               </div>
             </div>
@@ -514,11 +405,9 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-3 text-xs text-gray-600 space-y-2">
               <p className="font-bold text-sm text-gray-800">겹치기 사용법</p>
               <div className="space-y-1.5">
-                <p><span className="font-medium text-green-700">원본에 맞추기</span>: 스크린샷 크기에 파싱 캘린더를 자동 맞춤. 겹치기 진입 시 자동 실행됩니다.</p>
-                <p><span className="font-medium text-purple-700">기준점 맞추기</span>: 스크린샷과 파싱 캘린더에서 같은 위치를 2번씩 클릭하면 정밀하게 맞춰줍니다.</p>
-                <p><span className="font-medium">원본↔파싱 슬라이더</span>: 겹침 투명도 조절. 원본쪽으로 밀면 스크린샷이, 파싱쪽으로 밀면 파싱 결과가 더 보입니다.</p>
-                <p><span className="font-medium">크기/가로/세로</span>: 파싱 캘린더의 비율을 수동 조절. "비율 자유"로 가로세로 따로 조절 가능.</p>
-                <p><span className="font-medium">좌우/상하</span>: 파싱 캘린더의 위치를 미세 조정.</p>
+                <p>파싱 캘린더가 스크린샷과 <span className="font-medium">같은 크기</span>로 자동 렌더링됩니다.</p>
+                <p><span className="font-medium text-purple-700">기준점 맞추기</span>: 스크린샷과 파싱 캘린더에서 같은 위치를 2번씩 클릭하면 위치를 맞춰줍니다.</p>
+                <p><span className="font-medium">원본↔파싱 슬라이더</span>: 겹침 투명도 조절.</p>
                 <p><span className="font-medium text-red-600">차이점 보기</span>: 색상 비교 모드. 같은 색끼리 겹치면 검정, 다르면 밝은 색으로 표시됩니다.</p>
               </div>
             </div>
@@ -556,29 +445,31 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           {!alignStep && (
             <>
               <div
-                className="relative border border-gray-300 rounded-lg overflow-auto select-none"
+                className="relative border border-gray-300 rounded-lg overflow-hidden select-none"
                 style={{ isolation: 'isolate' }}
               >
+                {/* Screenshot layer - sets the container size */}
                 <div style={{ opacity: diffMode ? 1 : (1 - overlayOpacity) }}>
                   <img src={image} alt="원본" className="w-full" draggable={false} />
                 </div>
+                {/* Parsed calendar layer - fills the same space as the screenshot */}
                 <div
                   className="absolute inset-0"
                   style={{
                     opacity: diffMode ? 1 : overlayOpacity,
                     mixBlendMode: diffMode ? 'difference' : 'normal',
-                    transform: `translate(${overlayOffset.x}px, ${overlayOffset.y}px) scale(${overlayScaleX}, ${overlayScaleY})`,
-                    transformOrigin: 'top left',
+                    left: overlayOffset.x,
+                    top: overlayOffset.y,
                     pointerEvents: 'none',
                   }}
                 >
-                  {renderCalendar(diffMode)}
+                  {renderCalendar(diffMode, true)}
                 </div>
               </div>
 
               {diffMode && (
                 <p className="text-xs text-gray-400 text-center mt-2">
-                  같은 색 = 검정(일치) / 밝은 색 = 차이 | 크기와 위치를 맞춘 뒤 비교하세요
+                  같은 색 = 검정(일치) / 밝은 색 = 차이 | 기준점 맞추기로 위치 조절
                 </p>
               )}
             </>
