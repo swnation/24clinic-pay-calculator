@@ -32,14 +32,15 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Calibration: measure cell size from screenshot
-  type CalibStep = null | 'topLeft' | 'bottomRight' | 'enterDay';
+  // Calibration: measure cell + badge size from screenshot
+  type CalibStep = null | 'topLeft' | 'bottomRight' | 'enterDay' | 'badgeTop' | 'badgeBottom';
   const [calibStep, setCalibStep] = useState<CalibStep>(null);
   const [calibPt1, setCalibPt1] = useState({ x: 0, y: 0 });
   const [calibPt2, setCalibPt2] = useState({ x: 0, y: 0 });
+  const [calibBadgeY1, setCalibBadgeY1] = useState(0);
   const [calibDayInput, setCalibDayInput] = useState('');
   const [calibration, setCalibration] = useState<{
-    cellW: number; cellH: number; gridX: number; gridY: number; headerH: number;
+    cellW: number; cellH: number; gridX: number; gridY: number; headerH: number; badgeH: number;
   } | null>(null);
 
   const handleCalibClick = (e: React.MouseEvent) => {
@@ -53,6 +54,15 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     } else if (calibStep === 'bottomRight') {
       setCalibPt2({ x, y });
       setCalibStep('enterDay');
+    } else if (calibStep === 'badgeTop') {
+      setCalibBadgeY1(y);
+      setCalibStep('badgeBottom');
+    } else if (calibStep === 'badgeBottom') {
+      const badgeH = Math.abs(y - calibBadgeY1);
+      if (badgeH >= 2 && calibration) {
+        setCalibration({ ...calibration, badgeH: Math.round(badgeH) });
+      }
+      setCalibStep(null);
     }
   };
 
@@ -118,9 +128,12 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     const headerH = Math.round(cellH * 0.22);
     const gridX = Math.round(Math.min(calibPt1.x, calibPt2.x) - col * cellW);
     const gridY = Math.round(Math.min(calibPt1.y, calibPt2.y) - headerH - row * cellH);
+    // Default badge height: estimate from cell (3 slots, ~3 badges visible = cellH / 7)
+    const badgeH = Math.round(cellH / 7);
 
-    setCalibration({ cellW: Math.round(cellW), cellH: Math.round(cellH), gridX, gridY, headerH });
-    setCalibStep(null);
+    setCalibration({ cellW: Math.round(cellW), cellH: Math.round(cellH), gridX, gridY, headerH, badgeH });
+    // Move to badge measurement
+    setCalibStep('badgeTop');
     setCalibDayInput('');
   };
 
@@ -150,13 +163,15 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const timeSlots: TimeSlotKey[] = ['morning', 'afternoon', 'evening'];
 
   // cal = calibrated cell dimensions (from screenshot measurement), or null = default
-  const renderCalendar = (transparent = false, cal?: { cellW: number; cellH: number; headerH: number } | null) => {
+  const renderCalendar = (transparent = false, cal?: { cellW: number; cellH: number; headerH: number; badgeH: number } | null) => {
     const cw = cal?.cellW;
     const ch = cal?.cellH;
     const hh = cal?.headerH;
-    // Scale text/badge proportionally to cell height
+    const bh = cal?.badgeH;
+    // Scale text proportionally to badge height
     const textScale = ch ? Math.max(7, Math.min(11, Math.round(ch / 10))) : 11;
-    const badgeScale = ch ? Math.max(7, Math.min(11, Math.round(ch / 11))) : null;
+    const badgeFontSize = bh ? Math.max(6, Math.round(bh * 0.65)) : null;
+    const badgeHeight = bh || null;
 
     return (
       <div className={cal ? '' : 'overflow-x-auto'}>
@@ -199,7 +214,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                           {r1.map(s => (
                             <div key={s.id}
                               className={`leading-tight px-0.5 py-[1px] rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
-                              style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeScale ? `${badgeScale}px` : '10px' }}
+                              style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', height: badgeHeight ? `${badgeHeight}px` : undefined, lineHeight: badgeHeight ? `${badgeHeight - 2}px` : undefined, padding: badgeHeight ? '1px 2px' : undefined, overflow: 'hidden' }}
                             >
                               <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
                               <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
@@ -211,7 +226,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                             {r2.map(s => (
                               <div key={s.id}
                                 className={`leading-tight px-0.5 py-[1px] rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
-                                style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeScale ? `${badgeScale}px` : '10px' }}
+                                style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', height: badgeHeight ? `${badgeHeight}px` : undefined, lineHeight: badgeHeight ? `${badgeHeight - 2}px` : undefined, padding: badgeHeight ? '1px 2px' : undefined, overflow: 'hidden' }}
                               >
                                 <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
                                 <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
@@ -394,11 +409,15 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           {calibStep && (
             <div>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-center">
-                {calibStep === 'topLeft' && <p className="text-sm text-blue-800 font-medium">1/3: 스크린샷에서 아무 셀의 왼쪽 위 모서리를 클릭하세요</p>}
-                {calibStep === 'bottomRight' && <p className="text-sm text-blue-800 font-medium">2/3: 같은 셀의 오른쪽 아래 모서리를 클릭하세요</p>}
+                {calibStep === 'topLeft' && (
+                  <p className="text-sm text-blue-800 font-medium">1/5: 일자가 써있는 셀의 <b>왼쪽 위</b> 모서리를 클릭하세요</p>
+                )}
+                {calibStep === 'bottomRight' && (
+                  <p className="text-sm text-blue-800 font-medium">2/5: 같은 셀의 <b>오른쪽 아래</b> 모서리를 클릭하세요</p>
+                )}
                 {calibStep === 'enterDay' && (
                   <div>
-                    <p className="text-sm text-blue-800 font-medium mb-2">3/3: 클릭한 셀의 날짜를 입력하세요</p>
+                    <p className="text-sm text-blue-800 font-medium mb-2">3/5: 클릭한 셀의 날짜를 입력하세요</p>
                     <div className="flex items-center justify-center gap-2">
                       <input type="number" min="1" max="31" value={calibDayInput}
                         onChange={e => setCalibDayInput(e.target.value)}
@@ -406,12 +425,21 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                         className="w-20 border rounded px-3 py-2 text-sm text-center"
                         autoFocus />
                       <button onClick={applyCalibration}
-                        className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium">적용</button>
+                        className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium">다음</button>
                     </div>
                   </div>
                 )}
+                {calibStep === 'badgeTop' && (
+                  <div>
+                    <p className="text-sm text-blue-800 font-medium">4/5: 아무 색깔 블록(배지)의 <b>위쪽 경계</b>를 클릭하세요</p>
+                    <button onClick={() => setCalibStep(null)} className="text-xs text-gray-400 mt-1 hover:text-gray-600">건너뛰기</button>
+                  </div>
+                )}
+                {calibStep === 'badgeBottom' && (
+                  <p className="text-sm text-blue-800 font-medium">5/5: 같은 블록의 <b>아래쪽 경계</b>를 클릭하세요</p>
+                )}
               </div>
-              {(calibStep === 'topLeft' || calibStep === 'bottomRight') && (
+              {(calibStep === 'topLeft' || calibStep === 'bottomRight' || calibStep === 'badgeTop' || calibStep === 'badgeBottom') && (
                 <div className="border-2 border-blue-400 rounded-lg overflow-auto cursor-crosshair" onClick={handleCalibClick}>
                   <img src={image} alt="스크린샷" className="w-full" draggable={false} />
                 </div>
