@@ -197,23 +197,24 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
             const dayData = structuredShifts.get(dateStr);
             const hasRoom2 = monthHasRoom2;
             return (
-              <div key={dateStr} className={`${cal ? 'overflow-hidden flex flex-col' : 'h-[110px]'} p-0.5 ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
-                <div className={`flex items-baseline gap-0.5 shrink-0 ${transparent ? 'invisible' : ''}`}>
+              <div key={dateStr} className={`${cal ? 'overflow-hidden flex flex-col' : 'h-[110px]'} ${cal ? 'p-0' : 'p-0.5'} ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
+                <div className={`flex items-baseline gap-0.5 shrink-0 ${transparent ? 'invisible' : ''}`}
+                  style={cal ? { height: Math.round(ch! * 0.15), overflow: 'hidden', paddingLeft: 2 } : undefined}>
                   <span className={`font-bold ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}
                     style={{ fontSize: cal ? `${textScale}px` : '11px' }}>{day}</span>
                   {holiday && !cal && <span className="text-[7px] text-red-500">{holiday}</span>}
                 </div>
-                <div className="flex flex-col flex-1 min-h-0">
+                <div className={`flex flex-col flex-1 min-h-0 ${cal ? 'overflow-hidden' : ''}`}>
                   {timeSlots.map((slot, slotIdx) => {
                     const r1 = dayData?.[slot]?.room1 || [];
                     const r2 = dayData?.[slot]?.room2 || [];
                     return (
-                      <div key={slot} className={`flex flex-1 min-h-0 ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
-                        <div className="flex-1 px-0.5">
+                      <div key={slot} className={`flex flex-1 min-h-0 overflow-hidden ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
+                        <div className="flex-1 overflow-hidden" style={cal ? { padding: '0 1px' } : { padding: '2px' }}>
                           {r1.map(s => (
                             <div key={s.id}
-                              className={`leading-tight px-0.5 py-[1px] rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
-                              style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px' }}
+                              className={`rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
+                              style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', lineHeight: 1.3, padding: cal ? '0 2px' : '1px 2px' }}
                             >
                               <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
                               <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
@@ -221,11 +222,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                           ))}
                         </div>
                         {hasRoom2 && (
-                          <div className={`flex-1 px-0.5 ${!transparent ? 'border-l border-dashed border-gray-300' : ''}`}>
+                          <div className="flex-1 overflow-hidden" style={cal ? { padding: '0 1px' } : { padding: '2px' }}>
                             {r2.map(s => (
                               <div key={s.id}
-                                className={`leading-tight px-0.5 py-[1px] rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
-                                style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px' }}
+                                className={`rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
+                                style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', lineHeight: 1.3, padding: cal ? '0 2px' : '1px 2px' }}
                               >
                                 <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
                                 <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
