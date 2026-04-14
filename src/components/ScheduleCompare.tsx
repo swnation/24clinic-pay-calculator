@@ -35,6 +35,9 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [showHelp, setShowHelp] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null);
+  const autoFitDone = useRef(false);
 
   // Alignment wizard: 4 clicks (screenshot1, parsed1, screenshot2, parsed2)
   type AlignStep = null | 's1' | 'p1' | 's2' | 'p2';
@@ -127,6 +130,30 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     while (days.length % 7 !== 0) days.push(null);
     return days;
   }, [year, month]);
+
+  // Parsed calendar dimensions (min-width 840px, header ~30px + rows * 110px)
+  const calRows = Math.ceil(calendarDays.length / 7);
+  const CAL_WIDTH = 840;
+  const CAL_HEIGHT = 30 + calRows * 110;
+
+  // Auto-fit overlay to screenshot dimensions
+  const autoFitToImage = () => {
+    if (!imgDims) return;
+    const sx = imgDims.w / CAL_WIDTH;
+    const sy = imgDims.h / CAL_HEIGHT;
+    setOverlayScaleX(Math.round(sx * 1000) / 1000);
+    setOverlayScaleY(Math.round(sy * 1000) / 1000);
+    setOverlayOffset({ x: 0, y: 0 });
+    setLockAspect(false);
+  };
+
+  // Auto-fit when first entering overlay mode
+  useEffect(() => {
+    if (viewMode === 'overlay' && imgDims && !autoFitDone.current) {
+      autoFitToImage();
+      autoFitDone.current = true;
+    }
+  }, [viewMode, imgDims]);
 
   // Build structured data: date -> { morning/afternoon/evening } -> { room1, room2 }
   const structuredShifts = useMemo(() => {
@@ -320,7 +347,14 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                   className="px-2 py-1 text-[11px] bg-red-50 text-red-600 rounded active:bg-red-100">삭제</button>
               </div>
               <div className="border border-gray-300 rounded-lg overflow-auto bg-gray-50">
-                <img src={image} alt="원본 스케줄" className="w-full" />
+                <img
+                  ref={imgRef}
+                  src={image} alt="원본 스케줄" className="w-full"
+                  onLoad={e => {
+                    const el = e.currentTarget;
+                    setImgDims({ w: el.clientWidth, h: el.clientHeight });
+                  }}
+                />
               </div>
             </div>
           )}
@@ -431,6 +465,13 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                   차이점 보기
                 </button>
                 <button
+                  onClick={autoFitToImage}
+                  disabled={!imgDims}
+                  className="px-3 py-1.5 text-[11px] font-medium rounded-md border bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30"
+                >
+                  원본에 맞추기
+                </button>
+                <button
                   onClick={() => { setAlignStep('s1'); }}
                   className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
                     alignStep
@@ -473,7 +514,8 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-3 text-xs text-gray-600 space-y-2">
               <p className="font-bold text-sm text-gray-800">겹치기 사용법</p>
               <div className="space-y-1.5">
-                <p><span className="font-medium text-purple-700">기준점 맞추기</span> (추천): 스크린샷과 파싱 캘린더에서 같은 위치를 2번씩 클릭하면 자동으로 크기/위치를 맞춰줍니다.</p>
+                <p><span className="font-medium text-green-700">원본에 맞추기</span>: 스크린샷 크기에 파싱 캘린더를 자동 맞춤. 겹치기 진입 시 자동 실행됩니다.</p>
+                <p><span className="font-medium text-purple-700">기준점 맞추기</span>: 스크린샷과 파싱 캘린더에서 같은 위치를 2번씩 클릭하면 정밀하게 맞춰줍니다.</p>
                 <p><span className="font-medium">원본↔파싱 슬라이더</span>: 겹침 투명도 조절. 원본쪽으로 밀면 스크린샷이, 파싱쪽으로 밀면 파싱 결과가 더 보입니다.</p>
                 <p><span className="font-medium">크기/가로/세로</span>: 파싱 캘린더의 비율을 수동 조절. "비율 자유"로 가로세로 따로 조절 가능.</p>
                 <p><span className="font-medium">좌우/상하</span>: 파싱 캘린더의 위치를 미세 조정.</p>
