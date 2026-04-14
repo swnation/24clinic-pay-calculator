@@ -27,45 +27,37 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'screenshot' | 'parsed' | 'overlay'>('screenshot');
   const [overlayOpacity, setOverlayOpacity] = useState(0.5);
-  const [overlayOffset, setOverlayOffset] = useState({ x: 0, y: 0 });
   const [diffMode, setDiffMode] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Alignment wizard: 4 clicks (screenshot1, parsed1, screenshot2, parsed2)
-  type AlignStep = null | 's1' | 'p1' | 's2' | 'p2';
+  // Overlay rect: defines where the calendar grid sits within the screenshot
+  // null = fill entire image, set = specific area
+  const [overlayRect, setOverlayRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  // Alignment: 2 clicks on screenshot to define calendar area
+  type AlignStep = null | 'topLeft' | 'bottomRight';
   const [alignStep, setAlignStep] = useState<AlignStep>(null);
-  const alignPoints = useRef({ sx1: 0, sy1: 0, px1: 0, py1: 0, sx2: 0, sy2: 0, py2: 0 });
+  const alignPoint1 = useRef({ x: 0, y: 0 });
 
-  const alignInstructions: Record<Exclude<AlignStep, null>, string> = {
-    s1: '1/4: 스크린샷에서 기준점 1을 클릭하세요 (예: 1일 셀의 왼쪽 위 모서리)',
-    p1: '2/4: 파싱 캘린더에서 같은 위치를 클릭하세요',
-    s2: '3/4: 스크린샷에서 기준점 2를 클릭하세요 (기준점 1과 멀리)',
-    p2: '4/4: 파싱 캘린더에서 같은 위치를 클릭하세요',
-  };
-
-  const handleAlignClick = (e: React.MouseEvent, type: 'screenshot' | 'parsed') => {
+  const handleAlignClick = (e: React.MouseEvent) => {
     if (!alignStep) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left + (e.currentTarget as HTMLElement).scrollLeft;
     const y = e.clientY - rect.top + (e.currentTarget as HTMLElement).scrollTop;
-    const ap = alignPoints.current;
 
-    if (alignStep === 's1' && type === 'screenshot') {
-      ap.sx1 = x; ap.sy1 = y; setAlignStep('p1');
-    } else if (alignStep === 'p1' && type === 'parsed') {
-      ap.px1 = x; ap.py1 = y; setAlignStep('s2');
-    } else if (alignStep === 's2' && type === 'screenshot') {
-      ap.sx2 = x; ap.sy2 = y; setAlignStep('p2');
-    } else if (alignStep === 'p2' && type === 'parsed') {
-      // Calculate offset: average of two point pairs
-      const px2 = x; const py2 = y;
-      const ox1 = ap.sx1 - ap.px1;
-      const oy1 = ap.sy1 - ap.py1;
-      const ox2 = ap.sx2 - px2;
-      const oy2 = ap.sy2 - py2;
-      setOverlayOffset({ x: Math.round((ox1 + ox2) / 2), y: Math.round((oy1 + oy2) / 2) });
+    if (alignStep === 'topLeft') {
+      alignPoint1.current = { x, y };
+      setAlignStep('bottomRight');
+    } else if (alignStep === 'bottomRight') {
+      const p1 = alignPoint1.current;
+      setOverlayRect({
+        x: Math.round(Math.min(p1.x, x)),
+        y: Math.round(Math.min(p1.y, y)),
+        w: Math.round(Math.abs(x - p1.x)),
+        h: Math.round(Math.abs(y - p1.y)),
+      });
       setAlignStep(null);
     }
   };
@@ -220,7 +212,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     </div>
   );
 
-  const hasOffset = overlayOffset.x !== 0 || overlayOffset.y !== 0;
+  const hasRect = overlayRect !== null;
 
   return (
     <div ref={containerRef}>
@@ -349,26 +341,6 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               <span className="text-xs text-gray-500 whitespace-nowrap w-8">파싱</span>
             </div>
 
-            {/* Position sliders */}
-            {hasOffset && (
-              <>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500 whitespace-nowrap w-8">좌우</span>
-                  <input type="range" min="-300" max="300" step="1" value={overlayOffset.x}
-                    onChange={e => setOverlayOffset(o => ({ ...o, x: Number(e.target.value) }))}
-                    className="flex-1 h-2 accent-green-600" />
-                  <span className="text-xs text-gray-500 w-8 text-right">{overlayOffset.x}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500 whitespace-nowrap w-8">상하</span>
-                  <input type="range" min="-300" max="300" step="1" value={overlayOffset.y}
-                    onChange={e => setOverlayOffset(o => ({ ...o, y: Number(e.target.value) }))}
-                    className="flex-1 h-2 accent-green-600" />
-                  <span className="text-xs text-gray-500 w-8 text-right">{overlayOffset.y}</span>
-                </div>
-              </>
-            )}
-
             {/* Buttons */}
             <div className="flex items-center justify-between flex-wrap gap-1">
               <div className="flex gap-1">
@@ -379,11 +351,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                   }`}
                 >차이점 보기</button>
                 <button
-                  onClick={() => { setAlignStep('s1'); }}
+                  onClick={() => { setAlignStep('topLeft'); }}
                   className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
                     alignStep ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
                   }`}
-                >{alignStep ? '맞추는 중...' : '기준점 맞추기'}</button>
+                >{alignStep ? (alignStep === 'topLeft' ? '왼쪽 위 클릭...' : '오른쪽 아래 클릭...') : '영역 지정'}</button>
                 <button onClick={() => setShowHelp(!showHelp)}
                   className="px-2 py-1.5 text-[11px] text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md">?</button>
               </div>
@@ -392,9 +364,9 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                   <button onClick={() => setAlignStep(null)}
                     className="px-2 py-1 text-[11px] text-red-500 hover:bg-red-50 rounded">취소</button>
                 )}
-                {hasOffset && (
-                  <button onClick={() => setOverlayOffset({ x: 0, y: 0 })}
-                    className="px-2 py-1 text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded">위치 초기화</button>
+                {hasRect && (
+                  <button onClick={() => setOverlayRect(null)}
+                    className="px-2 py-1 text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded">영역 초기화</button>
                 )}
               </div>
             </div>
@@ -405,39 +377,29 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-3 text-xs text-gray-600 space-y-2">
               <p className="font-bold text-sm text-gray-800">겹치기 사용법</p>
               <div className="space-y-1.5">
-                <p>파싱 캘린더가 스크린샷과 <span className="font-medium">같은 크기</span>로 자동 렌더링됩니다.</p>
-                <p><span className="font-medium text-purple-700">기준점 맞추기</span>: 스크린샷과 파싱 캘린더에서 같은 위치를 2번씩 클릭하면 위치를 맞춰줍니다.</p>
+                <p><span className="font-medium text-blue-700">영역 지정</span> (추천): 스크린샷에서 캘린더의 <b>왼쪽 위</b>와 <b>오른쪽 아래</b> 모서리를 클릭하면 그 영역에 딱 맞게 렌더링됩니다. 2번만 클릭하면 끝!</p>
                 <p><span className="font-medium">원본↔파싱 슬라이더</span>: 겹침 투명도 조절.</p>
                 <p><span className="font-medium text-red-600">차이점 보기</span>: 색상 비교 모드. 같은 색끼리 겹치면 검정, 다르면 밝은 색으로 표시됩니다.</p>
               </div>
             </div>
           )}
 
-          {/* Alignment wizard instruction */}
+          {/* Alignment: click on screenshot to define calendar area */}
           {alignStep && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-center">
-              <p className="text-sm text-blue-800 font-medium">{alignInstructions[alignStep]}</p>
-              <p className="text-xs text-blue-500 mt-1">
-                {(alignStep === 's1' || alignStep === 's2') ? '아래 스크린샷을 클릭하세요' : '아래 파싱 캘린더를 클릭하세요'}
-              </p>
-            </div>
-          )}
-
-          {/* Alignment mode: show screenshot or parsed separately for clicking */}
-          {alignStep && (alignStep === 's1' || alignStep === 's2') && (
-            <div
-              className="border border-blue-300 rounded-lg overflow-auto cursor-crosshair mb-3"
-              onClick={e => handleAlignClick(e, 'screenshot')}
-            >
-              <img src={image!} alt="스크린샷" className="w-full" draggable={false} />
-            </div>
-          )}
-          {alignStep && (alignStep === 'p1' || alignStep === 'p2') && (
-            <div
-              className="border border-blue-300 rounded-lg overflow-auto cursor-crosshair mb-3"
-              onClick={e => handleAlignClick(e, 'parsed')}
-            >
-              {renderCalendar(false)}
+            <div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-center">
+                <p className="text-sm text-blue-800 font-medium">
+                  {alignStep === 'topLeft'
+                    ? '1/2: 스크린샷에서 캘린더의 왼쪽 위 모서리를 클릭하세요'
+                    : '2/2: 스크린샷에서 캘린더의 오른쪽 아래 모서리를 클릭하세요'}
+                </p>
+              </div>
+              <div
+                className="border-2 border-blue-400 rounded-lg overflow-auto cursor-crosshair"
+                onClick={handleAlignClick}
+              >
+                <img src={image!} alt="스크린샷" className="w-full" draggable={false} />
+              </div>
             </div>
           )}
 
@@ -452,14 +414,16 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 <div style={{ opacity: diffMode ? 1 : (1 - overlayOpacity) }}>
                   <img src={image} alt="원본" className="w-full" draggable={false} />
                 </div>
-                {/* Parsed calendar layer - fills the same space as the screenshot */}
+                {/* Parsed calendar layer - fills specific area or entire image */}
                 <div
-                  className="absolute inset-0"
+                  className="absolute"
                   style={{
                     opacity: diffMode ? 1 : overlayOpacity,
                     mixBlendMode: diffMode ? 'difference' : 'normal',
-                    left: overlayOffset.x,
-                    top: overlayOffset.y,
+                    left: overlayRect ? overlayRect.x : 0,
+                    top: overlayRect ? overlayRect.y : 0,
+                    width: overlayRect ? overlayRect.w : '100%',
+                    height: overlayRect ? overlayRect.h : '100%',
                     pointerEvents: 'none',
                   }}
                 >
