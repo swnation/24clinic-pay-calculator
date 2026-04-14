@@ -26,36 +26,9 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [image, setImage] = useState<string | null>(null);
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'screenshot' | 'parsed' | 'overlay'>('screenshot');
-  const [overlayOpacity, setOverlayOpacity] = useState(0.3);
-  const [diffMode, setDiffMode] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
+  const [overlayOpacity, setOverlayOpacity] = useState(0.5);
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Calibration: measure cell size → calculate CSS scale
-  type CalibStep = null | 'topLeft' | 'bottomRight' | 'enterDay';
-  const [calibStep, setCalibStep] = useState<CalibStep>(null);
-  const [calibPt1, setCalibPt1] = useState({ x: 0, y: 0 });
-  const [calibPt2, setCalibPt2] = useState({ x: 0, y: 0 });
-  const [calibDayInput, setCalibDayInput] = useState('');
-  // scaleX, scaleY, gridX, gridY for CSS transform
-  const [calibration, setCalibration] = useState<{
-    scaleX: number; scaleY: number; gridX: number; gridY: number;
-  } | null>(null);
-
-  const handleCalibClick = (e: React.MouseEvent) => {
-    if (!calibStep || calibStep === 'enterDay') return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left + (e.currentTarget as HTMLElement).scrollLeft;
-    const y = e.clientY - rect.top + (e.currentTarget as HTMLElement).scrollTop;
-    if (calibStep === 'topLeft') {
-      setCalibPt1({ x, y });
-      setCalibStep('bottomRight');
-    } else if (calibStep === 'bottomRight') {
-      setCalibPt2({ x, y });
-      setCalibStep('enterDay');
-    }
-  };
 
   const monthStr = `${year}-${pad(month)}`;
   const shifts = getShiftsForMonth(monthStr);
@@ -103,34 +76,6 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     return days;
   }, [year, month]);
 
-
-  const applyCalibration = () => {
-    const dayNum = parseInt(calibDayInput);
-    const dayIdx = calendarDays.indexOf(dayNum);
-    if (isNaN(dayNum) || dayIdx < 0) return;
-
-    const cellW = Math.abs(calibPt2.x - calibPt1.x);
-    const cellH = Math.abs(calibPt2.y - calibPt1.y);
-    if (cellW < 5 || cellH < 5) return;
-
-    // Normal calendar: 840px / 7 = 120px per column, 110px per row, ~24px header
-    const NATURAL_COL_W = 120;
-    const NATURAL_ROW_H = 110;
-    const NATURAL_HEADER_H = 24;
-
-    const scaleX = cellW / NATURAL_COL_W;
-    const scaleY = cellH / NATURAL_ROW_H;
-
-    const col = dayIdx % 7;
-    const row = Math.floor(dayIdx / 7);
-    // Grid top-left on the screenshot
-    const gridX = Math.round(Math.min(calibPt1.x, calibPt2.x) - col * cellW);
-    const gridY = Math.round(Math.min(calibPt1.y, calibPt2.y) - NATURAL_HEADER_H * scaleY - row * cellH);
-
-    setCalibration({ scaleX, scaleY, gridX, gridY });
-    setCalibStep(null);
-    setCalibDayInput('');
-  };
 
   // Build structured data: date -> { morning/afternoon/evening } -> { room1, room2 }
   const structuredShifts = useMemo(() => {
@@ -332,115 +277,26 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
         </div>
       )}
 
-      {/* Overlay mode */}
+      {/* Overlay mode - simple: screenshot + parsed calendar stacked */}
       {viewMode === 'overlay' && image && (
         <div>
-          <div className="space-y-2 mb-3 px-2">
-            <div className={`flex items-center gap-3 ${diffMode ? 'opacity-30 pointer-events-none' : ''}`}>
-              <span className="text-xs text-gray-500 whitespace-nowrap w-8">원본</span>
-              <input type="range" min="0" max="1" step="0.05" value={overlayOpacity}
-                onChange={e => setOverlayOpacity(Number(e.target.value))} className="flex-1 h-2 accent-blue-600" />
-              <span className="text-xs text-gray-500 whitespace-nowrap w-8">파싱</span>
-            </div>
-
-            <div className="flex items-center justify-between flex-wrap gap-1">
-              <div className="flex gap-1">
-                <button onClick={() => setDiffMode(!diffMode)}
-                  className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
-                    diffMode ? 'bg-red-50 border-red-300 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                  }`}>차이점 보기</button>
-                <button
-                  onClick={() => setCalibStep('topLeft')}
-                  className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
-                    calibStep ? 'bg-blue-50 border-blue-300 text-blue-700' : calibration ? 'bg-green-50 border-green-300 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                  }`}
-                >{calibStep ? '측정 중...' : calibration ? '셀 재측정' : '셀 크기 측정'}</button>
-                <button onClick={() => setShowHelp(!showHelp)}
-                  className="px-2 py-1.5 text-[11px] text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md">?</button>
-              </div>
-              <div className="flex gap-1">
-                {calibStep && (
-                  <button onClick={() => setCalibStep(null)} className="px-2 py-1 text-[11px] text-red-500 hover:bg-red-50 rounded">취소</button>
-                )}
-                {calibration && !calibStep && (
-                  <button onClick={() => setCalibration(null)} className="px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100 rounded">측정 초기화</button>
-                )}
-              </div>
-            </div>
+          <div className="flex items-center gap-3 mb-3 px-2">
+            <span className="text-xs text-gray-500 whitespace-nowrap">원본</span>
+            <input type="range" min="0" max="1" step="0.05" value={overlayOpacity}
+              onChange={e => setOverlayOpacity(Number(e.target.value))} className="flex-1 h-2 accent-blue-600" />
+            <span className="text-xs text-gray-500 whitespace-nowrap">파싱</span>
           </div>
 
-          {showHelp && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-3 text-xs text-gray-600 space-y-2">
-              <p className="font-bold text-sm text-gray-800">겹치기 사용법</p>
-              <div className="space-y-1.5">
-                <p><span className="font-medium text-blue-700">셀 크기 측정</span> (추천): 스크린샷에서 셀 하나의 모서리 2개를 클릭하고 날짜를 입력하면, 캘린더를 원본과 동일한 비율로 다시 그립니다.</p>
-                <p><span className="font-medium">원본↔파싱 슬라이더</span>: 투명도 조절.</p>
-                <p><span className="font-medium text-red-600">차이점 보기</span>: 같은 색끼리 겹치면 검정, 다르면 밝은 색.</p>
-              </div>
+          <div className="relative border border-gray-300 rounded-lg overflow-auto select-none" style={{ isolation: 'isolate' }}>
+            {/* Screenshot layer */}
+            <div style={{ opacity: 1 - overlayOpacity }}>
+              <img src={image} alt="원본" className="w-full" draggable={false} />
             </div>
-          )}
-
-          {/* Calibration wizard */}
-          {calibStep && (
-            <div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-center">
-                {calibStep === 'topLeft' && (
-                  <p className="text-sm text-blue-800 font-medium">1/3: 일자가 써있는 셀의 <b>왼쪽 위</b> 모서리를 클릭하세요</p>
-                )}
-                {calibStep === 'bottomRight' && (
-                  <p className="text-sm text-blue-800 font-medium">2/3: 같은 셀의 <b>오른쪽 아래</b> 모서리를 클릭하세요</p>
-                )}
-                {calibStep === 'enterDay' && (
-                  <div>
-                    <p className="text-sm text-blue-800 font-medium mb-2">3/3: 클릭한 셀의 날짜를 입력하세요</p>
-                    <div className="flex items-center justify-center gap-2">
-                      <input type="number" min="1" max="31" value={calibDayInput}
-                        onChange={e => setCalibDayInput(e.target.value)}
-                        placeholder="예: 5"
-                        className="w-20 border rounded px-3 py-2 text-sm text-center"
-                        autoFocus />
-                      <button onClick={applyCalibration}
-                        className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium">다음</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              {(calibStep === 'topLeft' || calibStep === 'bottomRight') && (
-                <div className="border-2 border-blue-400 rounded-lg overflow-auto cursor-crosshair" onClick={handleCalibClick}>
-                  <img src={image} alt="스크린샷" className="w-full" draggable={false} />
-                </div>
-              )}
+            {/* Parsed calendar layer - identical to 파싱결과 view */}
+            <div className="absolute inset-0" style={{ opacity: overlayOpacity, pointerEvents: 'none' }}>
+              {renderCalendar(false)}
             </div>
-          )}
-
-          {/* Overlay: screenshot + normal calendar with CSS scale */}
-          {!calibStep && (
-            <div className="relative border border-gray-300 rounded-lg overflow-auto select-none" style={{ isolation: 'isolate' }}>
-              <div style={{ opacity: diffMode ? 1 : (1 - overlayOpacity) }}>
-                <img src={image} alt="원본" className="w-full" draggable={false} />
-              </div>
-              <div
-                className="absolute"
-                style={{
-                  opacity: diffMode ? 1 : overlayOpacity,
-                  mixBlendMode: diffMode ? 'difference' : 'normal',
-                  left: calibration ? calibration.gridX : 0,
-                  top: calibration ? calibration.gridY : 0,
-                  transform: calibration ? `scale(${calibration.scaleX}, ${calibration.scaleY})` : undefined,
-                  transformOrigin: 'top left',
-                  pointerEvents: 'none',
-                }}
-              >
-                {renderCalendar(diffMode)}
-              </div>
-            </div>
-          )}
-
-          {diffMode && (
-            <p className="text-xs text-gray-400 text-center mt-2">
-              같은 색 = 검정(일치) / 밝은 색 = 차이
-            </p>
-          )}
+          </div>
         </div>
       )}
 
