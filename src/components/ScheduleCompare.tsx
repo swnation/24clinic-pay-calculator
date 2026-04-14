@@ -27,7 +27,9 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'screenshot' | 'parsed' | 'overlay'>('screenshot');
   const [overlayOpacity, setOverlayOpacity] = useState(0.5);
-  const [overlayScale, setOverlayScale] = useState(1);
+  const [overlayScaleX, setOverlayScaleX] = useState(1);
+  const [overlayScaleY, setOverlayScaleY] = useState(1);
+  const [lockAspect, setLockAspect] = useState(true);
   const [overlayOffset, setOverlayOffset] = useState({ x: 0, y: 0 });
   const [diffMode, setDiffMode] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -177,7 +179,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     </div>
   );
 
-  const hasOffsetOrScale = overlayScale !== 1 || overlayOffset.x !== 0 || overlayOffset.y !== 0;
+  const hasOffsetOrScale = overlayScaleX !== 1 || overlayScaleY !== 1 || overlayOffset.x !== 0 || overlayOffset.y !== 0;
 
   return (
     <div ref={containerRef}>
@@ -306,16 +308,40 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               <span className="text-xs text-gray-500 whitespace-nowrap w-8">파싱</span>
             </div>
 
-            {/* Scale slider */}
+            {/* Scale sliders */}
             <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-500 whitespace-nowrap w-8">크기</span>
+              <span className="text-xs text-gray-500 whitespace-nowrap w-8">{lockAspect ? '크기' : '가로'}</span>
               <input
                 type="range" min="0.3" max="2.5" step="0.01"
-                value={overlayScale}
-                onChange={e => setOverlayScale(Number(e.target.value))}
+                value={overlayScaleX}
+                onChange={e => {
+                  const v = Number(e.target.value);
+                  setOverlayScaleX(v);
+                  if (lockAspect) setOverlayScaleY(v);
+                }}
                 className="flex-1 h-2 accent-purple-600"
               />
-              <span className="text-xs text-gray-500 whitespace-nowrap w-8 text-right">{Math.round(overlayScale * 100)}%</span>
+              <span className="text-xs text-gray-500 whitespace-nowrap w-8 text-right">{Math.round(overlayScaleX * 100)}%</span>
+            </div>
+            {!lockAspect && (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500 whitespace-nowrap w-8">세로</span>
+                <input
+                  type="range" min="0.3" max="2.5" step="0.01"
+                  value={overlayScaleY}
+                  onChange={e => setOverlayScaleY(Number(e.target.value))}
+                  className="flex-1 h-2 accent-pink-500"
+                />
+                <span className="text-xs text-gray-500 whitespace-nowrap w-8 text-right">{Math.round(overlayScaleY * 100)}%</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 pl-10">
+              <button
+                onClick={() => setLockAspect(!lockAspect)}
+                className={`text-[10px] px-2 py-0.5 rounded border ${lockAspect ? 'bg-purple-50 border-purple-300 text-purple-700' : 'bg-gray-50 border-gray-200 text-gray-500'}`}
+              >
+                {lockAspect ? '비율 고정' : '비율 자유'}
+              </button>
             </div>
 
             {/* Position sliders (shown in diff mode or when offset is non-zero) */}
@@ -358,7 +384,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               </button>
               {hasOffsetOrScale && (
                 <button
-                  onClick={() => { setOverlayScale(1); setOverlayOffset({ x: 0, y: 0 }); }}
+                  onClick={() => { setOverlayScaleX(1); setOverlayScaleY(1); setOverlayOffset({ x: 0, y: 0 }); }}
                   className="px-2 py-1 text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
                 >
                   위치/크기 초기화
@@ -382,7 +408,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               style={{
                 opacity: diffMode ? 1 : overlayOpacity,
                 mixBlendMode: diffMode ? 'difference' : 'normal',
-                transform: `translate(${overlayOffset.x}px, ${overlayOffset.y}px) scale(${overlayScale})`,
+                transform: `translate(${overlayOffset.x}px, ${overlayOffset.y}px) scale(${overlayScaleX}, ${overlayScaleY})`,
                 transformOrigin: 'top left',
                 pointerEvents: 'none',
               }}
