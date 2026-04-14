@@ -196,7 +196,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
               // First time - seed default data
               await saveAppData(defaultState as unknown as Record<string, unknown>);
             }
-            setCurrentUser(profile);
+            // Auto-restore admin for 유성우 if accidentally demoted
+            if (profile.doctorName === '유성우' && profile.role !== 'admin') {
+              const restored = { ...profile, role: 'admin' as const };
+              await updateUserRole(user.uid, 'admin');
+              setCurrentUser(restored);
+            } else {
+              setCurrentUser(profile);
+            }
             setNeedsRegistration(false);
             dataLoaded.current = true;
           } else {
@@ -416,13 +423,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setRole = useCallback(async (uid: string, role: 'admin' | 'doctor') => {
+    // Prevent self-demotion from admin
+    if (firebaseUser?.uid === uid && role === 'doctor' && currentUser?.role === 'admin') {
+      return; // 자기 자신을 관리자에서 해제할 수 없음
+    }
     await updateUserRole(uid, role);
     setAllUsers(prev => prev.map(u => u.uid === uid ? { ...u, profile: { ...u.profile, role } } : u));
-    // If changing own role
     if (firebaseUser?.uid === uid) {
       setCurrentUser(prev => prev ? { ...prev, role } : prev);
     }
-  }, [firebaseUser]);
+  }, [firebaseUser, currentUser]);
 
   const removeUser = useCallback(async (uid: string) => {
     await deleteUserProfile(uid);
