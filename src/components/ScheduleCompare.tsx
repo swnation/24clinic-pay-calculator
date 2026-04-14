@@ -27,40 +27,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'screenshot' | 'parsed' | 'overlay'>('screenshot');
   const [overlayOpacity, setOverlayOpacity] = useState(0.5);
+  const [overlayOffset, setOverlayOffset] = useState({ x: 0, y: 0 });
   const [diffMode, setDiffMode] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Overlay rect: defines where the calendar grid sits within the screenshot
-  // null = fill entire image, set = specific area
-  const [overlayRect, setOverlayRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-
-  // Alignment: 2 clicks on screenshot to define calendar area
-  type AlignStep = null | 'topLeft' | 'bottomRight';
-  const [alignStep, setAlignStep] = useState<AlignStep>(null);
-  const alignPoint1 = useRef({ x: 0, y: 0 });
-
-  const handleAlignClick = (e: React.MouseEvent) => {
-    if (!alignStep) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left + (e.currentTarget as HTMLElement).scrollLeft;
-    const y = e.clientY - rect.top + (e.currentTarget as HTMLElement).scrollTop;
-
-    if (alignStep === 'topLeft') {
-      alignPoint1.current = { x, y };
-      setAlignStep('bottomRight');
-    } else if (alignStep === 'bottomRight') {
-      const p1 = alignPoint1.current;
-      setOverlayRect({
-        x: Math.round(Math.min(p1.x, x)),
-        y: Math.round(Math.min(p1.y, y)),
-        w: Math.round(Math.abs(x - p1.x)),
-        h: Math.round(Math.abs(y - p1.y)),
-      });
-      setAlignStep(null);
-    }
-  };
 
   const monthStr = `${year}-${pad(month)}`;
   const shifts = getShiftsForMonth(monthStr);
@@ -108,8 +79,6 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     return days;
   }, [year, month]);
 
-  const calRows = Math.ceil(calendarDays.length / 7);
-
   // Build structured data: date -> { morning/afternoon/evening } -> { room1, room2 }
   const structuredShifts = useMemo(() => {
     const map = new Map<string, Record<TimeSlotKey, { room1: Shift[]; room2: Shift[] }>>();
@@ -135,12 +104,12 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
   const timeSlots: TimeSlotKey[] = ['morning', 'afternoon', 'evening'];
 
-  const renderShiftBadge = (s: Shift, transparent = false, compact = false) => {
+  const renderShiftBadge = (s: Shift, transparent = false) => {
     const dimmed = filterDoctor !== 'all' && s.doctorId !== filterDoctor;
     return (
       <div
         key={s.id}
-        className={`${compact ? 'text-[9px] leading-tight px-0.5 py-[1px]' : 'text-[10px] sm:text-[11px] leading-snug px-1 py-[2px]'} rounded-sm whitespace-nowrap overflow-hidden ${dimmed ? 'opacity-15' : ''}`}
+        className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[2px] rounded-sm whitespace-nowrap overflow-hidden ${dimmed ? 'opacity-15' : ''}`}
         style={{ backgroundColor: getDoctorColor(s.doctorId) }}
       >
         <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
@@ -149,57 +118,43 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     );
   };
 
-  // fitContainer: cells flex to fill container (for overlay)
-  // Proportions matched to 24clinic.kr calendar layout
-  const renderCalendar = (transparent = false, fitContainer = false) => (
-    <div className={fitContainer ? 'h-full' : 'overflow-x-auto'}>
-      <div
-        className={`grid grid-cols-7 ${fitContainer ? '' : 'min-w-[840px]'} ${transparent ? '' : 'border-t border-l border-gray-400'}`}
-        style={fitContainer ? { height: '100%', gridTemplateRows: `minmax(0, 0.22fr) repeat(${calRows}, 1fr)` } : undefined}
-      >
-        {/* Day headers */}
+  const renderCalendar = (transparent = false) => (
+    <div className="overflow-x-auto">
+      <div className={`grid grid-cols-7 min-w-[840px] ${transparent ? '' : 'border-t border-l border-gray-400'}`}>
         {dayNames.map((name, i) => (
-          <div key={name} className={`text-center font-bold flex items-center justify-center ${fitContainer ? 'text-[9px]' : 'text-xs py-1.5'} ${transparent
+          <div key={name} className={`text-center text-xs font-bold py-1.5 ${transparent
             ? 'text-transparent select-none'
             : `border-b border-r border-gray-400 ${
               i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
             }`
           }`}>{name}</div>
         ))}
-
-        {/* Day cells */}
         {calendarDays.map((day, idx) => {
-          if (day === null) {
-            return <div key={`e-${idx}`} className={`${fitContainer ? 'min-h-0' : 'h-[110px]'} ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`} />;
-          }
+          if (day === null) return <div key={`e-${idx}`} className={`h-[110px] ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`} />;
           const dateStr = `${year}-${pad(month)}-${pad(day)}`;
           const isHolSun = isHolidayOrSunday(dateStr, state.customHolidays);
           const isSat = isSaturday(dateStr);
           const holiday = getHolidayName(dateStr);
           const dayData = structuredShifts.get(dateStr);
           const hasRoom2 = monthHasRoom2;
-
           return (
-            <div key={dateStr} className={`${fitContainer ? 'min-h-0 overflow-hidden flex flex-col' : 'h-[110px]'} p-0.5 ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
-              {/* Date number */}
-              <div className={`flex items-baseline gap-0.5 ${transparent ? 'invisible' : ''} ${fitContainer ? 'shrink-0' : ''}`}>
-                <span className={`font-bold ${fitContainer ? 'text-[10px]' : 'text-[11px]'} ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
-                {holiday && !fitContainer && <span className="text-[7px] text-red-500">{holiday}</span>}
+            <div key={dateStr} className={`h-[110px] p-0.5 ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
+              <div className={`flex items-baseline gap-0.5 mb-0.5 ${transparent ? 'invisible' : ''}`}>
+                <span className={`font-bold text-[11px] ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
+                {holiday && <span className="text-[7px] text-red-500">{holiday}</span>}
               </div>
-
-              {/* Shift slots */}
-              <div className={`flex flex-col ${fitContainer ? 'flex-1 min-h-0' : ''}`}>
+              <div className="flex flex-col">
                 {timeSlots.map((slot, slotIdx) => {
                   const r1 = dayData?.[slot]?.room1 || [];
                   const r2 = dayData?.[slot]?.room2 || [];
                   return (
-                    <div key={slot} className={`flex ${fitContainer ? 'min-h-0 flex-1' : 'min-h-[24px]'} ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
-                      <div className={`flex-1 ${fitContainer ? 'px-0.5 py-0' : 'py-0.5 px-0.5'}`}>
-                        {r1.map(s => renderShiftBadge(s, transparent, fitContainer))}
+                    <div key={slot} className={`flex min-h-[24px] ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
+                      <div className="flex-1 py-0.5 px-0.5">
+                        {r1.map(s => renderShiftBadge(s, transparent))}
                       </div>
                       {hasRoom2 && (
-                        <div className={`flex-1 ${fitContainer ? 'px-0.5 py-0' : 'py-0.5 px-0.5'} ${!transparent ? 'border-l border-dashed border-gray-300' : ''}`}>
-                          {r2.map(s => renderShiftBadge(s, transparent, fitContainer))}
+                        <div className={`flex-1 py-0.5 px-0.5 ${!transparent ? 'border-l border-dashed border-gray-300' : ''}`}>
+                          {r2.map(s => renderShiftBadge(s, transparent))}
                         </div>
                       )}
                     </div>
@@ -213,7 +168,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     </div>
   );
 
-  const hasRect = overlayRect !== null;
+  const hasOffset = overlayOffset.x !== 0 || overlayOffset.y !== 0;
 
   return (
     <div ref={containerRef}>
@@ -326,118 +281,90 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
         </div>
       )}
 
-      {/* Overlay mode - screenshot + parsed layered */}
+      {/* Overlay mode - same calendar as 파싱결과, layered on screenshot */}
       {viewMode === 'overlay' && image && (
         <div>
           <div className="space-y-2 mb-3 px-2">
-            {/* Opacity slider */}
             <div className={`flex items-center gap-3 ${diffMode ? 'opacity-30 pointer-events-none' : ''}`}>
               <span className="text-xs text-gray-500 whitespace-nowrap w-8">원본</span>
-              <input
-                type="range" min="0" max="1" step="0.05"
-                value={overlayOpacity}
-                onChange={e => setOverlayOpacity(Number(e.target.value))}
-                className="flex-1 h-2 accent-blue-600"
-              />
+              <input type="range" min="0" max="1" step="0.05" value={overlayOpacity}
+                onChange={e => setOverlayOpacity(Number(e.target.value))} className="flex-1 h-2 accent-blue-600" />
               <span className="text-xs text-gray-500 whitespace-nowrap w-8">파싱</span>
             </div>
 
-            {/* Buttons */}
+            {/* Position fine-tune */}
+            {hasOffset && (
+              <>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 whitespace-nowrap w-8">좌우</span>
+                  <input type="range" min="-200" max="200" step="1" value={overlayOffset.x}
+                    onChange={e => setOverlayOffset(o => ({ ...o, x: Number(e.target.value) }))} className="flex-1 h-2 accent-green-600" />
+                  <span className="text-xs text-gray-500 w-8 text-right">{overlayOffset.x}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 whitespace-nowrap w-8">상하</span>
+                  <input type="range" min="-200" max="200" step="1" value={overlayOffset.y}
+                    onChange={e => setOverlayOffset(o => ({ ...o, y: Number(e.target.value) }))} className="flex-1 h-2 accent-green-600" />
+                  <span className="text-xs text-gray-500 w-8 text-right">{overlayOffset.y}</span>
+                </div>
+              </>
+            )}
+
             <div className="flex items-center justify-between flex-wrap gap-1">
               <div className="flex gap-1">
-                <button
-                  onClick={() => setDiffMode(!diffMode)}
+                <button onClick={() => setDiffMode(!diffMode)}
                   className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
                     diffMode ? 'bg-red-50 border-red-300 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                  }`}
-                >차이점 보기</button>
-                <button
-                  onClick={() => { setAlignStep('topLeft'); }}
-                  className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
-                    alignStep ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                  }`}
-                >{alignStep ? (alignStep === 'topLeft' ? '왼쪽 위 클릭...' : '오른쪽 아래 클릭...') : '영역 지정'}</button>
+                  }`}>차이점 보기</button>
                 <button onClick={() => setShowHelp(!showHelp)}
                   className="px-2 py-1.5 text-[11px] text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md">?</button>
               </div>
-              <div className="flex gap-1">
-                {alignStep && (
-                  <button onClick={() => setAlignStep(null)}
-                    className="px-2 py-1 text-[11px] text-red-500 hover:bg-red-50 rounded">취소</button>
-                )}
-                {hasRect && (
-                  <button onClick={() => setOverlayRect(null)}
-                    className="px-2 py-1 text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded">영역 초기화</button>
-                )}
-              </div>
+              {hasOffset && (
+                <button onClick={() => setOverlayOffset({ x: 0, y: 0 })}
+                  className="px-2 py-1 text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded">위치 초기화</button>
+              )}
             </div>
           </div>
 
-          {/* Help guide */}
           {showHelp && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-3 text-xs text-gray-600 space-y-2">
               <p className="font-bold text-sm text-gray-800">겹치기 사용법</p>
               <div className="space-y-1.5">
-                <p><span className="font-medium text-blue-700">영역 지정</span> (추천): 스크린샷에서 캘린더의 <b>왼쪽 위</b>와 <b>오른쪽 아래</b> 모서리를 클릭하면 그 영역에 딱 맞게 렌더링됩니다. 2번만 클릭하면 끝!</p>
-                <p><span className="font-medium">원본↔파싱 슬라이더</span>: 겹침 투명도 조절.</p>
-                <p><span className="font-medium text-red-600">차이점 보기</span>: 색상 비교 모드. 같은 색끼리 겹치면 검정, 다르면 밝은 색으로 표시됩니다.</p>
+                <p>파싱결과와 <b>동일한 캘린더</b>가 스크린샷 위에 겹쳐집니다.</p>
+                <p><span className="font-medium">원본↔파싱 슬라이더</span>: 투명도 조절. 원본쪽이면 스크린샷, 파싱쪽이면 파싱 캘린더가 더 보입니다.</p>
+                <p><span className="font-medium">좌우/상하</span>: 파싱 캘린더 위치를 미세 조정합니다.</p>
+                <p><span className="font-medium text-red-600">차이점 보기</span>: 같은 색끼리 겹치면 검정, 다르면 밝은 색.</p>
               </div>
             </div>
           )}
 
-          {/* Alignment: click on screenshot to define calendar area */}
-          {alignStep && (
-            <div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-center">
-                <p className="text-sm text-blue-800 font-medium">
-                  {alignStep === 'topLeft'
-                    ? '1/2: 스크린샷에서 캘린더의 왼쪽 위 모서리를 클릭하세요'
-                    : '2/2: 스크린샷에서 캘린더의 오른쪽 아래 모서리를 클릭하세요'}
-                </p>
-              </div>
-              <div
-                className="border-2 border-blue-400 rounded-lg overflow-auto cursor-crosshair"
-                onClick={handleAlignClick}
-              >
-                <img src={image!} alt="스크린샷" className="w-full" draggable={false} />
-              </div>
+          {/* Overlay: screenshot + parsed calendar stacked */}
+          <div
+            className="relative border border-gray-300 rounded-lg overflow-auto select-none"
+            style={{ isolation: 'isolate' }}
+          >
+            {/* Screenshot layer */}
+            <div style={{ opacity: diffMode ? 1 : (1 - overlayOpacity) }}>
+              <img src={image} alt="원본" className="w-full" draggable={false} />
             </div>
-          )}
+            {/* Parsed calendar layer - SAME as 파싱결과 view */}
+            <div
+              className="absolute inset-0"
+              style={{
+                opacity: diffMode ? 1 : overlayOpacity,
+                mixBlendMode: diffMode ? 'difference' : 'normal',
+                transform: `translate(${overlayOffset.x}px, ${overlayOffset.y}px)`,
+                pointerEvents: 'none',
+              }}
+            >
+              {renderCalendar(diffMode)}
+            </div>
+          </div>
 
-          {/* Overlay container - hidden during alignment */}
-          {!alignStep && (
-            <>
-              <div
-                className="relative border border-gray-300 rounded-lg overflow-hidden select-none"
-                style={{ isolation: 'isolate' }}
-              >
-                {/* Screenshot layer - sets the container size */}
-                <div style={{ opacity: diffMode ? 1 : (1 - overlayOpacity) }}>
-                  <img src={image} alt="원본" className="w-full" draggable={false} />
-                </div>
-                {/* Parsed calendar layer - fills specific area or entire image */}
-                <div
-                  className="absolute"
-                  style={{
-                    opacity: diffMode ? 1 : overlayOpacity,
-                    mixBlendMode: diffMode ? 'difference' : 'normal',
-                    left: overlayRect ? overlayRect.x : 0,
-                    top: overlayRect ? overlayRect.y : 0,
-                    width: overlayRect ? overlayRect.w : '100%',
-                    height: overlayRect ? overlayRect.h : '100%',
-                    pointerEvents: 'none',
-                  }}
-                >
-                  {renderCalendar(diffMode, true)}
-                </div>
-              </div>
-
-              {diffMode && (
-                <p className="text-xs text-gray-400 text-center mt-2">
-                  같은 색 = 검정(일치) / 밝은 색 = 차이 | 기준점 맞추기로 위치 조절
-                </p>
-              )}
-            </>
+          {diffMode && (
+            <p className="text-xs text-gray-400 text-center mt-2">
+              같은 색 = 검정(일치) / 밝은 색 = 차이
+            </p>
           )}
         </div>
       )}
