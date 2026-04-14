@@ -18,8 +18,8 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 function SaveButton() {
-  const { saveStatus, saveNow, isAdmin } = useAppStore();
-  if (!isAdmin) return null;
+  const { saveStatus, saveNow, effectiveIsAdmin } = useAppStore();
+  if (!effectiveIsAdmin) return null;
 
   const isBusy = saveStatus === 'saving';
   return (
@@ -212,7 +212,7 @@ function BlockedScreen() {
 }
 
 function App() {
-  const { currentUser, firebaseUser, authLoading, needsRegistration, isAdmin, signOut } = useAppStore();
+  const { currentUser, firebaseUser, authLoading, needsRegistration, isAdmin, adminPreview, toggleAdminPreview, signOut } = useAppStore();
   const now = new Date();
   const [tab, setTab] = useState<Tab>('schedule');
   const [year, setYear] = useState(now.getFullYear());
@@ -244,7 +244,16 @@ function App() {
           <div className="flex items-center gap-2">
             <SaveButton />
             <span className="text-xs sm:text-sm text-gray-400">{currentUser.doctorName}</span>
-            {isAdmin && <span className="text-[9px] bg-yellow-600 text-white px-1.5 py-0.5 rounded">관리자</span>}
+            {isAdmin && (
+              <button
+                onClick={toggleAdminPreview}
+                className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                  adminPreview ? 'bg-gray-600 text-gray-300' : 'bg-yellow-600 text-white'
+                }`}
+              >
+                {adminPreview ? '일반모드' : '관리자'}
+              </button>
+            )}
             <button
               onClick={signOut}
               className="text-[10px] sm:text-xs text-gray-500 hover:text-gray-300 px-1"

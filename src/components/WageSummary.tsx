@@ -18,14 +18,14 @@ const DAY_TYPES: DayType[] = ['weekday', 'saturday', 'sunday', 'holiday'];
 const TIME_SLOTS: TimeSlot[] = ['morning', 'afternoon', 'evening'];
 
 export default function WageSummary({ year, month, onMonthChange }: Props) {
-  const { state, getShiftsForDoctor, setBranchMonthlyRate, currentUser, isAdmin } = useAppStore();
+  const { state, getShiftsForDoctor, setBranchMonthlyRate, currentUser, effectiveIsAdmin } = useAppStore();
 
   // Non-admin: can only see own doctor. Admin: can see all.
   const myDoctorId = currentUser?.doctorId || '';
-  const [selectedDoctor, setSelectedDoctor] = useState(isAdmin ? (state.doctors[0]?.id || '') : myDoctorId);
+  const [selectedDoctor, setSelectedDoctor] = useState(effectiveIsAdmin ? (state.doctors[0]?.id || '') : myDoctorId);
 
   // Force own doctor for non-admin
-  const effectiveDoctor = isAdmin ? selectedDoctor : myDoctorId;
+  const effectiveDoctor = effectiveIsAdmin ? selectedDoctor : myDoctorId;
   const [showRateEditor, setShowRateEditor] = useState(false);
 
   const monthStr = `${year}-${pad(month)}`;
@@ -77,7 +77,7 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
       </div>
 
       {/* Doctor selector - admin only */}
-      {isAdmin ? (
+      {effectiveIsAdmin ? (
         <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-5 justify-center">
           {state.doctors.filter(d => !d.archived).map(d => (
             <button
@@ -167,7 +167,7 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
           </div>
 
           {/* Branch monthly rate editor - admin only */}
-          {isAdmin && (() => {
+          {effectiveIsAdmin && (() => {
             const branchOverride = state.branchMonthlyRates.find(r => r.month === monthStr);
             const handleRateChange = (key: keyof RatesBySlot, value: string) => {
               const num = value === '' ? undefined : Number(value);

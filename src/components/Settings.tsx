@@ -139,13 +139,13 @@ function PersonalRateEditor() {
 
 // --- User Management (Admin) ---
 function UserManagement() {
-  const { allUsers, activeDoctors, state, refreshUsers, setRole, removeUser, isAdmin } = useAppStore();
+  const { allUsers, activeDoctors, state, refreshUsers, setRole, removeUser, effectiveIsAdmin } = useAppStore();
 
   useEffect(() => {
-    if (isAdmin) refreshUsers();
-  }, [isAdmin, refreshUsers]);
+    if (effectiveIsAdmin) refreshUsers();
+  }, [effectiveIsAdmin, refreshUsers]);
 
-  if (!isAdmin) return null;
+  if (!effectiveIsAdmin) return null;
 
   const getDoctorName = (doctorId: string) => state.doctors.find(d => d.id === doctorId)?.name || '?';
   const getDoctorColor = (doctorId: string) => state.doctors.find(d => d.id === doctorId)?.color || '#E0E0E0';
@@ -220,9 +220,9 @@ export default function Settings() {
   const {
     state, addDoctor, updateDoctor, removeDoctor, archiveDoctor, restoreDoctor,
     setDefaultRates, addSpecialRatePeriod, removeSpecialRatePeriod,
-    toggleHoliday, setBranchName,
+    toggleHoliday, setBranchName, setAvailabilityDeadline,
     importData, resetData,
-    isAdmin,
+    effectiveIsAdmin,
   } = useAppStore();
 
   const [newDoctorName, setNewDoctorName] = useState('');
@@ -284,26 +284,46 @@ export default function Settings() {
       <PersonalRateEditor />
 
       {/* --- ADMIN ONLY below --- */}
-      {!isAdmin && (
+      {!effectiveIsAdmin && (
         <p className="text-xs text-gray-400 text-center">관리자 기능은 관리자 계정에서만 사용할 수 있습니다.</p>
       )}
 
-      {isAdmin && (
+      {effectiveIsAdmin && (
         <>
           {/* User management */}
           <UserManagement />
 
-          {/* Branch name */}
+          {/* Branch settings */}
           <section className="bg-white rounded-lg border border-gray-200 p-6">
             <h3 className="font-bold text-lg mb-4">지점 설정</h3>
-            <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-gray-700">지점명</label>
-              <input
-                type="text"
-                value={state.branchName}
-                onChange={e => setBranchName(e.target.value)}
-                className="border rounded-lg px-3 py-2 text-sm w-40"
-              />
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-gray-700 w-24">지점명</label>
+                <input
+                  type="text"
+                  value={state.branchName}
+                  onChange={e => setBranchName(e.target.value)}
+                  className="border rounded-lg px-3 py-2 text-sm w-40"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-gray-700 w-24">가능일 마감</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">매월</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="28"
+                    value={state.availabilityDeadline || 20}
+                    onChange={e => setAvailabilityDeadline(Number(e.target.value))}
+                    className="border rounded-lg px-3 py-2 text-sm w-16 text-center"
+                  />
+                  <span className="text-sm text-gray-500">일 자정까지</span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400">
+                다음 달 근무 가능일을 해당 일자 밤 12시까지 제출/수정할 수 있습니다.
+              </p>
             </div>
           </section>
 
