@@ -170,8 +170,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     const bh = cal?.badgeH;
     // Scale text proportionally to badge height
     const textScale = ch ? Math.max(7, Math.min(11, Math.round(ch / 10))) : 11;
-    const badgeFontSize = bh ? Math.max(6, Math.round(bh * 0.65)) : null;
-    const badgeHeight = bh || null;
+    const badgeFontSize = bh ? Math.max(6, Math.min(11, Math.round(bh * 0.6))) : null;
 
     return (
       <div className={cal ? '' : 'overflow-x-auto'}>
@@ -214,7 +213,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                           {r1.map(s => (
                             <div key={s.id}
                               className={`leading-tight px-0.5 py-[1px] rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
-                              style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', height: badgeHeight ? `${badgeHeight}px` : undefined, lineHeight: badgeHeight ? `${badgeHeight - 2}px` : undefined, padding: badgeHeight ? '1px 2px' : undefined, overflow: 'hidden' }}
+                              style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px' }}
                             >
                               <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
                               <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
@@ -226,7 +225,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                             {r2.map(s => (
                               <div key={s.id}
                                 className={`leading-tight px-0.5 py-[1px] rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
-                                style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', height: badgeHeight ? `${badgeHeight}px` : undefined, lineHeight: badgeHeight ? `${badgeHeight - 2}px` : undefined, padding: badgeHeight ? '1px 2px' : undefined, overflow: 'hidden' }}
+                                style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px' }}
                               >
                                 <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
                                 <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
