@@ -209,7 +209,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                     const r1 = dayData?.[slot]?.room1 || [];
                     const r2 = dayData?.[slot]?.room2 || [];
                     return (
-                      <div key={slot} className={`flex flex-1 min-h-0 overflow-hidden ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
+                      <div key={slot} className={`flex flex-1 min-h-0 overflow-hidden ${!transparent && !cal && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
                         <div className="flex-1 overflow-hidden" style={cal ? { padding: 0 } : { padding: '2px' }}>
                           {r1.map(s => (
                             <div key={s.id}
