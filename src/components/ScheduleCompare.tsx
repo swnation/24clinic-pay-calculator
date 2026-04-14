@@ -32,8 +32,55 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [lockAspect, setLockAspect] = useState(true);
   const [overlayOffset, setOverlayOffset] = useState({ x: 0, y: 0 });
   const [diffMode, setDiffMode] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Alignment wizard: 4 clicks (screenshot1, parsed1, screenshot2, parsed2)
+  type AlignStep = null | 's1' | 'p1' | 's2' | 'p2';
+  const [alignStep, setAlignStep] = useState<AlignStep>(null);
+  const alignPoints = useRef({ sx1: 0, sy1: 0, px1: 0, py1: 0, sx2: 0, sy2: 0, py2: 0 });
+
+  const alignInstructions: Record<Exclude<AlignStep, null>, string> = {
+    s1: '1/4: 스크린샷에서 기준점 1을 클릭하세요 (예: 1일 셀의 왼쪽 위 모서리)',
+    p1: '2/4: 파싱 캘린더에서 같은 위치를 클릭하세요',
+    s2: '3/4: 스크린샷에서 기준점 2를 클릭하세요 (기준점 1과 멀리)',
+    p2: '4/4: 파싱 캘린더에서 같은 위치를 클릭하세요',
+  };
+
+  const handleAlignClick = (e: React.MouseEvent, type: 'screenshot' | 'parsed') => {
+    if (!alignStep) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left + (e.currentTarget as HTMLElement).scrollLeft;
+    const y = e.clientY - rect.top + (e.currentTarget as HTMLElement).scrollTop;
+    const ap = alignPoints.current;
+
+    if (alignStep === 's1' && type === 'screenshot') {
+      ap.sx1 = x; ap.sy1 = y; setAlignStep('p1');
+    } else if (alignStep === 'p1' && type === 'parsed') {
+      ap.px1 = x; ap.py1 = y; setAlignStep('s2');
+    } else if (alignStep === 's2' && type === 'screenshot') {
+      ap.sx2 = x; ap.sy2 = y; setAlignStep('p2');
+    } else if (alignStep === 'p2' && type === 'parsed') {
+      // Calculate transform
+      const px2 = x; const py2 = y;
+      const dsx = ap.sx2 - ap.sx1;
+      const dsy = ap.sy2 - ap.sy1;
+      const dpx = px2 - ap.px1;
+      const dpy = py2 - ap.py1;
+      if (Math.abs(dpx) > 1 && Math.abs(dpy) > 1) {
+        const sx = dsx / dpx;
+        const sy = dsy / dpy;
+        const ox = ap.sx1 - ap.px1 * sx;
+        const oy = ap.sy1 - ap.py1 * sy;
+        setOverlayScaleX(Math.round(sx * 100) / 100);
+        setOverlayScaleY(Math.round(sy * 100) / 100);
+        setOverlayOffset({ x: Math.round(ox), y: Math.round(oy) });
+        setLockAspect(false);
+      }
+      setAlignStep(null);
+    }
+  };
 
   const monthStr = `${year}-${pad(month)}`;
   const shifts = getShiftsForMonth(monthStr);
@@ -370,57 +417,129 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
               </>
             )}
 
-            {/* Diff mode toggle + reset */}
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => setDiffMode(!diffMode)}
-                className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
-                  diffMode
-                    ? 'bg-red-50 border-red-300 text-red-700'
-                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                차이점 보기
-              </button>
-              {hasOffsetOrScale && (
+            {/* Diff mode + auto-align + help + reset */}
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <div className="flex gap-1">
                 <button
-                  onClick={() => { setOverlayScaleX(1); setOverlayScaleY(1); setOverlayOffset({ x: 0, y: 0 }); }}
-                  className="px-2 py-1 text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                  onClick={() => setDiffMode(!diffMode)}
+                  className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
+                    diffMode
+                      ? 'bg-red-50 border-red-300 text-red-700'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                  }`}
                 >
-                  위치/크기 초기화
+                  차이점 보기
                 </button>
-              )}
+                <button
+                  onClick={() => { setAlignStep('s1'); }}
+                  className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
+                    alignStep
+                      ? 'bg-blue-50 border-blue-300 text-blue-700'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {alignStep ? '맞추는 중...' : '기준점 맞추기'}
+                </button>
+                <button
+                  onClick={() => setShowHelp(!showHelp)}
+                  className="px-2 py-1.5 text-[11px] text-gray-400 hover:text-gray-600 border border-gray-200 rounded-md"
+                >
+                  ?
+                </button>
+              </div>
+              <div className="flex gap-1">
+                {alignStep && (
+                  <button
+                    onClick={() => setAlignStep(null)}
+                    className="px-2 py-1 text-[11px] text-red-500 hover:bg-red-50 rounded"
+                  >
+                    취소
+                  </button>
+                )}
+                {hasOffsetOrScale && (
+                  <button
+                    onClick={() => { setOverlayScaleX(1); setOverlayScaleY(1); setOverlayOffset({ x: 0, y: 0 }); }}
+                    className="px-2 py-1 text-[11px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                  >
+                    위치/크기 초기화
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Overlay container */}
-          <div
-            className="relative border border-gray-300 rounded-lg overflow-auto select-none"
-            style={{ isolation: 'isolate' }}
-          >
-            {/* Screenshot layer */}
-            <div style={{ opacity: diffMode ? 1 : (1 - overlayOpacity) }}>
-              <img src={image} alt="원본" className="w-full" draggable={false} />
+          {/* Help guide */}
+          {showHelp && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-3 text-xs text-gray-600 space-y-2">
+              <p className="font-bold text-sm text-gray-800">겹치기 사용법</p>
+              <div className="space-y-1.5">
+                <p><span className="font-medium text-purple-700">기준점 맞추기</span> (추천): 스크린샷과 파싱 캘린더에서 같은 위치를 2번씩 클릭하면 자동으로 크기/위치를 맞춰줍니다.</p>
+                <p><span className="font-medium">원본↔파싱 슬라이더</span>: 겹침 투명도 조절. 원본쪽으로 밀면 스크린샷이, 파싱쪽으로 밀면 파싱 결과가 더 보입니다.</p>
+                <p><span className="font-medium">크기/가로/세로</span>: 파싱 캘린더의 비율을 수동 조절. "비율 자유"로 가로세로 따로 조절 가능.</p>
+                <p><span className="font-medium">좌우/상하</span>: 파싱 캘린더의 위치를 미세 조정.</p>
+                <p><span className="font-medium text-red-600">차이점 보기</span>: 색상 비교 모드. 같은 색끼리 겹치면 검정, 다르면 밝은 색으로 표시됩니다.</p>
+              </div>
             </div>
-            {/* Parsed layer */}
+          )}
+
+          {/* Alignment wizard instruction */}
+          {alignStep && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-center">
+              <p className="text-sm text-blue-800 font-medium">{alignInstructions[alignStep]}</p>
+              <p className="text-xs text-blue-500 mt-1">
+                {(alignStep === 's1' || alignStep === 's2') ? '아래 스크린샷을 클릭하세요' : '아래 파싱 캘린더를 클릭하세요'}
+              </p>
+            </div>
+          )}
+
+          {/* Alignment mode: show screenshot or parsed separately for clicking */}
+          {alignStep && (alignStep === 's1' || alignStep === 's2') && (
             <div
-              className="absolute inset-0"
-              style={{
-                opacity: diffMode ? 1 : overlayOpacity,
-                mixBlendMode: diffMode ? 'difference' : 'normal',
-                transform: `translate(${overlayOffset.x}px, ${overlayOffset.y}px) scale(${overlayScaleX}, ${overlayScaleY})`,
-                transformOrigin: 'top left',
-                pointerEvents: 'none',
-              }}
+              className="border border-blue-300 rounded-lg overflow-auto cursor-crosshair mb-3"
+              onClick={e => handleAlignClick(e, 'screenshot')}
             >
-              {renderCalendar(diffMode)}
+              <img src={image!} alt="스크린샷" className="w-full" draggable={false} />
             </div>
-          </div>
+          )}
+          {alignStep && (alignStep === 'p1' || alignStep === 'p2') && (
+            <div
+              className="border border-blue-300 rounded-lg overflow-auto cursor-crosshair mb-3"
+              onClick={e => handleAlignClick(e, 'parsed')}
+            >
+              {renderCalendar(false)}
+            </div>
+          )}
 
-          {diffMode && (
-            <p className="text-xs text-gray-400 text-center mt-2">
-              같은 색 = 검정(일치) / 밝은 색 = 차이 | 크기와 위치를 맞춘 뒤 비교하세요
-            </p>
+          {/* Overlay container - hidden during alignment */}
+          {!alignStep && (
+            <>
+              <div
+                className="relative border border-gray-300 rounded-lg overflow-auto select-none"
+                style={{ isolation: 'isolate' }}
+              >
+                <div style={{ opacity: diffMode ? 1 : (1 - overlayOpacity) }}>
+                  <img src={image} alt="원본" className="w-full" draggable={false} />
+                </div>
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    opacity: diffMode ? 1 : overlayOpacity,
+                    mixBlendMode: diffMode ? 'difference' : 'normal',
+                    transform: `translate(${overlayOffset.x}px, ${overlayOffset.y}px) scale(${overlayScaleX}, ${overlayScaleY})`,
+                    transformOrigin: 'top left',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {renderCalendar(diffMode)}
+                </div>
+              </div>
+
+              {diffMode && (
+                <p className="text-xs text-gray-400 text-center mt-2">
+                  같은 색 = 검정(일치) / 밝은 색 = 차이 | 크기와 위치를 맞춘 뒤 비교하세요
+                </p>
+              )}
+            </>
           )}
         </div>
       )}
