@@ -26,9 +26,43 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [image, setImage] = useState<string | null>(null);
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'screenshot' | 'parsed' | 'overlay'>('screenshot');
-  const [overlayOpacity, setOverlayOpacity] = useState(0.5);
+  const [overlayOpacity, setOverlayOpacity] = useState(0.7);
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Calibration: 2 clicks on a cell → know cell size and grid position
+  type CalibStep = null | 'topLeft' | 'bottomRight' | 'enterDay';
+  const [calibStep, setCalibStep] = useState<CalibStep>(null);
+  const [calibPt1, setCalibPt1] = useState({ x: 0, y: 0 });
+  const [calibPt2, setCalibPt2] = useState({ x: 0, y: 0 });
+  const [calibDayInput, setCalibDayInput] = useState('');
+  const [grid, setGrid] = useState<{ cellW: number; cellH: number; originX: number; originY: number; headerH: number } | null>(null);
+
+  const handleCalibClick = (e: React.MouseEvent) => {
+    if (!calibStep || calibStep === 'enterDay') return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left + (e.currentTarget as HTMLElement).scrollLeft;
+    const y = e.clientY - rect.top + (e.currentTarget as HTMLElement).scrollTop;
+    if (calibStep === 'topLeft') { setCalibPt1({ x, y }); setCalibStep('bottomRight'); }
+    else if (calibStep === 'bottomRight') { setCalibPt2({ x, y }); setCalibStep('enterDay'); }
+  };
+
+  const applyCalib = () => {
+    const dayNum = parseInt(calibDayInput);
+    const dayIdx = calendarDays.indexOf(dayNum);
+    if (isNaN(dayNum) || dayIdx < 0) return;
+    const cellW = Math.abs(calibPt2.x - calibPt1.x);
+    const cellH = Math.abs(calibPt2.y - calibPt1.y);
+    if (cellW < 5 || cellH < 5) return;
+    const col = dayIdx % 7;
+    const row = Math.floor(dayIdx / 7);
+    const headerH = Math.round(cellH * 0.25);
+    const originX = Math.round(Math.min(calibPt1.x, calibPt2.x) - col * cellW);
+    const originY = Math.round(Math.min(calibPt1.y, calibPt2.y) - headerH - row * cellH);
+    setGrid({ cellW: Math.round(cellW), cellH: Math.round(cellH), originX, originY, headerH });
+    setCalibStep(null);
+    setCalibDayInput('');
+  };
 
   const monthStr = `${year}-${pad(month)}`;
   const shifts = getShiftsForMonth(monthStr);
@@ -277,26 +311,123 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
         </div>
       )}
 
-      {/* Overlay mode - simple: screenshot + parsed calendar stacked */}
+      {/* Overlay mode - screenshot as grid + parsed badges on top */}
       {viewMode === 'overlay' && image && (
         <div>
-          <div className="flex items-center gap-3 mb-3 px-2">
-            <span className="text-xs text-gray-500 whitespace-nowrap">원본</span>
-            <input type="range" min="0" max="1" step="0.05" value={overlayOpacity}
-              onChange={e => setOverlayOpacity(Number(e.target.value))} className="flex-1 h-2 accent-blue-600" />
-            <span className="text-xs text-gray-500 whitespace-nowrap">파싱</span>
+          <div className="space-y-2 mb-3 px-2">
+            {grid && (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500 whitespace-nowrap">투명도</span>
+                <input type="range" min="0.3" max="1" step="0.05" value={overlayOpacity}
+                  onChange={e => setOverlayOpacity(Number(e.target.value))} className="flex-1 h-2 accent-blue-600" />
+              </div>
+            )}
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <div className="flex gap-1">
+                <button onClick={() => setCalibStep('topLeft')}
+                  className={`px-3 py-1.5 text-[11px] font-medium rounded-md border transition-all ${
+                    calibStep ? 'bg-blue-50 border-blue-300 text-blue-700'
+                    : grid ? 'bg-green-50 border-green-300 text-green-700'
+                    : 'bg-blue-600 border-blue-600 text-white'
+                  }`}
+                >{calibStep ? '측정 중...' : grid ? '재측정' : '셀 위치 측정'}</button>
+              </div>
+              {grid && (
+                <button onClick={() => setGrid(null)}
+                  className="px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100 rounded">초기화</button>
+              )}
+            </div>
           </div>
 
-          <div className="relative border border-gray-300 rounded-lg overflow-auto select-none" style={{ isolation: 'isolate' }}>
-            {/* Screenshot layer */}
-            <div style={{ opacity: 1 - overlayOpacity }}>
+          {/* Calibration wizard */}
+          {calibStep && (
+            <div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-center">
+                {calibStep === 'topLeft' && <p className="text-sm text-blue-800 font-medium">1/3: 일자 셀의 <b>왼쪽 위</b> 모서리를 클릭</p>}
+                {calibStep === 'bottomRight' && <p className="text-sm text-blue-800 font-medium">2/3: 같은 셀의 <b>오른쪽 아래</b> 모서리를 클릭</p>}
+                {calibStep === 'enterDay' && (
+                  <div>
+                    <p className="text-sm text-blue-800 font-medium mb-2">3/3: 그 셀의 날짜</p>
+                    <div className="flex items-center justify-center gap-2">
+                      <input type="number" min="1" max="31" value={calibDayInput}
+                        onChange={e => setCalibDayInput(e.target.value)} placeholder="예: 5"
+                        className="w-20 border rounded px-3 py-2 text-sm text-center" autoFocus />
+                      <button onClick={applyCalib} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium">적용</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {(calibStep === 'topLeft' || calibStep === 'bottomRight') && (
+                <div className="border-2 border-blue-400 rounded-lg overflow-auto cursor-crosshair" onClick={handleCalibClick}>
+                  <img src={image} alt="스크린샷" className="w-full" draggable={false} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Screenshot + floating parsed badges */}
+          {!calibStep && (
+            <div className="relative border border-gray-300 rounded-lg overflow-auto select-none">
               <img src={image} alt="원본" className="w-full" draggable={false} />
+
+              {/* Parsed badges placed at calculated grid positions */}
+              {grid && calendarDays.map((day, idx) => {
+                if (day === null) return null;
+                const dateStr = `${year}-${pad(month)}-${pad(day)}`;
+                const dayData = structuredShifts.get(dateStr);
+                if (!dayData) return null;
+                const col = idx % 7;
+                const row = Math.floor(idx / 7);
+                const x = grid.originX + col * grid.cellW;
+                const y = grid.originY + grid.headerH + row * grid.cellH;
+                // Collect all shifts for this day in order
+                const allShifts: Shift[] = [];
+                for (const slot of timeSlots) {
+                  allShifts.push(...(dayData[slot]?.room1 || []));
+                  if (monthHasRoom2) allShifts.push(...(dayData[slot]?.room2 || []));
+                }
+                if (allShifts.length === 0) return null;
+                const badgeH = Math.round(grid.cellH / (allShifts.length + 1.5));
+                const fontSize = Math.max(7, Math.min(11, Math.round(badgeH * 0.7)));
+
+                return (
+                  <div key={dateStr} className="absolute" style={{
+                    left: x + 1, top: y + Math.round(grid.cellH * 0.15),
+                    width: grid.cellW - 2,
+                    opacity: overlayOpacity,
+                    pointerEvents: 'none',
+                  }}>
+                    {allShifts.map(s => {
+                      const dimmed = filterDoctor !== 'all' && s.doctorId !== filterDoctor;
+                      return (
+                        <div key={s.id}
+                          className={`whitespace-nowrap overflow-hidden rounded-sm ${dimmed ? 'opacity-15' : ''}`}
+                          style={{
+                            backgroundColor: getDoctorColor(s.doctorId),
+                            fontSize: `${fontSize}px`,
+                            lineHeight: 1.2,
+                            padding: '0 2px',
+                            height: badgeH,
+                          }}
+                        >
+                          <span className="font-medium">{getDoctorName(s.doctorId)}</span>
+                          <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+
+              {!grid && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+                  <p className="bg-white px-4 py-2 rounded-lg shadow text-sm text-gray-600">
+                    "셀 위치 측정" 버튼을 눌러 셀 하나를 측정하세요
+                  </p>
+                </div>
+              )}
             </div>
-            {/* Parsed calendar layer - identical to 파싱결과 view */}
-            <div className="absolute inset-0" style={{ opacity: overlayOpacity, pointerEvents: 'none' }}>
-              {renderCalendar(false)}
-            </div>
-          </div>
+          )}
         </div>
       )}
 
