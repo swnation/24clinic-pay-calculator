@@ -406,10 +406,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 }
                 if (r1Shifts.length === 0 && r2Shifts.length === 0) return null;
 
-                const dateRowH = Math.round(grid.cellH * 0.14);
+                const dateRowH = Math.round(grid.cellH * 0.22);
                 const badgeH = grid.badgeH;
                 const fontSize = Math.max(7, Math.min(11, Math.round(badgeH * 0.7)));
-                const roomW = hasRoom2 ? Math.floor((grid.cellW - 2) / 2) : grid.cellW - 2;
+                const halfW = Math.round(grid.cellW / 2);
+                const roomW = hasRoom2 ? halfW : grid.cellW;
 
                 const renderBadges = (shifts: Shift[], leftOffset: number) =>
                   shifts.map(s => {
@@ -436,13 +437,13 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
 
                 return (
                   <div key={dateStr} className="absolute" style={{
-                    left: x + 1, top: y,
-                    width: grid.cellW - 2, height: grid.cellH,
+                    left: x, top: y,
+                    width: grid.cellW, height: grid.cellH,
                     opacity: overlayOpacity,
                     pointerEvents: 'none',
                   }}>
                     {renderBadges(r1Shifts, 0)}
-                    {hasRoom2 && renderBadges(r2Shifts, roomW)}
+                    {hasRoom2 && renderBadges(r2Shifts, halfW)}
                   </div>
                 );
               })}
