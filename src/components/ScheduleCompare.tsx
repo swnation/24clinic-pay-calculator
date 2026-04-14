@@ -30,13 +30,14 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Calibration: 2 clicks on a cell → know cell size and grid position
-  type CalibStep = null | 'topLeft' | 'bottomRight' | 'enterDay';
+  // Calibration: cell + badge size
+  type CalibStep = null | 'topLeft' | 'bottomRight' | 'enterDay' | 'badgeTop' | 'badgeBottom';
   const [calibStep, setCalibStep] = useState<CalibStep>(null);
   const [calibPt1, setCalibPt1] = useState({ x: 0, y: 0 });
   const [calibPt2, setCalibPt2] = useState({ x: 0, y: 0 });
+  const [calibBadgeY1, setCalibBadgeY1] = useState(0);
   const [calibDayInput, setCalibDayInput] = useState('');
-  const [grid, setGrid] = useState<{ cellW: number; cellH: number; originX: number; originY: number; headerH: number } | null>(null);
+  const [grid, setGrid] = useState<{ cellW: number; cellH: number; originX: number; originY: number; headerH: number; badgeH: number } | null>(null);
 
   const handleCalibClick = (e: React.MouseEvent) => {
     if (!calibStep || calibStep === 'enterDay') return;
@@ -45,6 +46,12 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     const y = e.clientY - rect.top + (e.currentTarget as HTMLElement).scrollTop;
     if (calibStep === 'topLeft') { setCalibPt1({ x, y }); setCalibStep('bottomRight'); }
     else if (calibStep === 'bottomRight') { setCalibPt2({ x, y }); setCalibStep('enterDay'); }
+    else if (calibStep === 'badgeTop') { setCalibBadgeY1(y); setCalibStep('badgeBottom'); }
+    else if (calibStep === 'badgeBottom') {
+      const bh = Math.round(Math.abs(y - calibBadgeY1));
+      if (bh >= 3 && grid) setGrid({ ...grid, badgeH: bh });
+      setCalibStep(null);
+    }
   };
 
   const applyCalib = () => {
@@ -59,8 +66,9 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     const headerH = Math.round(cellH * 0.25);
     const originX = Math.round(Math.min(calibPt1.x, calibPt2.x) - col * cellW);
     const originY = Math.round(Math.min(calibPt1.y, calibPt2.y) - headerH - row * cellH);
-    setGrid({ cellW: Math.round(cellW), cellH: Math.round(cellH), originX, originY, headerH });
-    setCalibStep(null);
+    const badgeH = Math.round(cellH / 6); // default
+    setGrid({ cellW: Math.round(cellW), cellH: Math.round(cellH), originX, originY, headerH, badgeH });
+    setCalibStep('badgeTop'); // proceed to badge measurement
     setCalibDayInput('');
   };
 
@@ -318,7 +326,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
             {grid && (
               <div className="flex items-center gap-3">
                 <span className="text-xs text-gray-500 whitespace-nowrap">투명도</span>
-                <input type="range" min="0.3" max="1" step="0.05" value={overlayOpacity}
+                <input type="range" min="0" max="1" step="0.05" value={overlayOpacity}
                   onChange={e => setOverlayOpacity(Number(e.target.value))} className="flex-1 h-2 accent-blue-600" />
               </div>
             )}
@@ -343,21 +351,28 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           {calibStep && (
             <div>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-center">
-                {calibStep === 'topLeft' && <p className="text-sm text-blue-800 font-medium">1/3: 일자 셀의 <b>왼쪽 위</b> 모서리를 클릭</p>}
-                {calibStep === 'bottomRight' && <p className="text-sm text-blue-800 font-medium">2/3: 같은 셀의 <b>오른쪽 아래</b> 모서리를 클릭</p>}
+                {calibStep === 'topLeft' && <p className="text-sm text-blue-800 font-medium">1/5: 일자 셀의 <b>왼쪽 위</b> 모서리를 클릭</p>}
+                {calibStep === 'bottomRight' && <p className="text-sm text-blue-800 font-medium">2/5: 같은 셀의 <b>오른쪽 아래</b> 모서리를 클릭</p>}
                 {calibStep === 'enterDay' && (
                   <div>
-                    <p className="text-sm text-blue-800 font-medium mb-2">3/3: 그 셀의 날짜</p>
+                    <p className="text-sm text-blue-800 font-medium mb-2">3/5: 그 셀의 날짜</p>
                     <div className="flex items-center justify-center gap-2">
                       <input type="number" min="1" max="31" value={calibDayInput}
                         onChange={e => setCalibDayInput(e.target.value)} placeholder="예: 5"
                         className="w-20 border rounded px-3 py-2 text-sm text-center" autoFocus />
-                      <button onClick={applyCalib} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium">적용</button>
+                      <button onClick={applyCalib} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium">다음</button>
                     </div>
                   </div>
                 )}
+                {calibStep === 'badgeTop' && (
+                  <div>
+                    <p className="text-sm text-blue-800 font-medium">4/5: 색깔 블록 하나의 <b>윗쪽</b> 경계를 클릭</p>
+                    <button onClick={() => setCalibStep(null)} className="text-xs text-gray-400 mt-1">건너뛰기</button>
+                  </div>
+                )}
+                {calibStep === 'badgeBottom' && <p className="text-sm text-blue-800 font-medium">5/5: 같은 블록의 <b>아랫쪽</b> 경계를 클릭</p>}
               </div>
-              {(calibStep === 'topLeft' || calibStep === 'bottomRight') && (
+              {calibStep !== 'enterDay' && (
                 <div className="border-2 border-blue-400 rounded-lg overflow-auto cursor-crosshair" onClick={handleCalibClick}>
                   <img src={image} alt="스크린샷" className="w-full" draggable={false} />
                 </div>
@@ -391,10 +406,8 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 }
                 if (r1Shifts.length === 0 && r2Shifts.length === 0) return null;
 
-                const maxBadges = Math.max(r1Shifts.length, hasRoom2 ? r2Shifts.length : 0, 1);
                 const dateRowH = Math.round(grid.cellH * 0.14);
-                const availH = grid.cellH - dateRowH;
-                const badgeH = Math.min(Math.round(availH / maxBadges), Math.round(grid.cellH / 4));
+                const badgeH = grid.badgeH;
                 const fontSize = Math.max(7, Math.min(11, Math.round(badgeH * 0.7)));
                 const roomW = hasRoom2 ? Math.floor((grid.cellW - 2) / 2) : grid.cellW - 2;
 
