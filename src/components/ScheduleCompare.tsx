@@ -30,14 +30,15 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Calibration: cell + badge size
+  // Calibration: cell + badge position/size
   type CalibStep = null | 'topLeft' | 'bottomRight' | 'enterDay' | 'badgeTop' | 'badgeBottom';
   const [calibStep, setCalibStep] = useState<CalibStep>(null);
   const [calibPt1, setCalibPt1] = useState({ x: 0, y: 0 });
   const [calibPt2, setCalibPt2] = useState({ x: 0, y: 0 });
   const [calibBadgeY1, setCalibBadgeY1] = useState(0);
   const [calibDayInput, setCalibDayInput] = useState('');
-  const [grid, setGrid] = useState<{ cellW: number; cellH: number; originX: number; originY: number; headerH: number; badgeH: number } | null>(null);
+  // badgeOffsetY: where the first badge starts relative to cell top
+  const [grid, setGrid] = useState<{ cellW: number; cellH: number; originX: number; originY: number; headerH: number; badgeH: number; badgeOffsetY: number } | null>(null);
 
   const handleCalibClick = (e: React.MouseEvent) => {
     if (!calibStep || calibStep === 'enterDay') return;
@@ -49,7 +50,12 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     else if (calibStep === 'badgeTop') { setCalibBadgeY1(y); setCalibStep('badgeBottom'); }
     else if (calibStep === 'badgeBottom') {
       const bh = Math.round(Math.abs(y - calibBadgeY1));
-      if (bh >= 3 && grid) setGrid({ ...grid, badgeH: bh });
+      if (bh >= 3 && grid) {
+        // Calculate badge offset from the cell top
+        const cellTopY = Math.min(calibPt1.y, calibPt2.y);
+        const badgeOffsetY = Math.round(Math.min(calibBadgeY1, y) - cellTopY);
+        setGrid({ ...grid, badgeH: bh, badgeOffsetY });
+      }
       setCalibStep(null);
     }
   };
@@ -66,9 +72,10 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     const headerH = Math.round(cellH * 0.25);
     const originX = Math.round(Math.min(calibPt1.x, calibPt2.x) - col * cellW);
     const originY = Math.round(Math.min(calibPt1.y, calibPt2.y) - headerH - row * cellH);
-    const badgeH = Math.round(cellH / 6); // default
-    setGrid({ cellW: Math.round(cellW), cellH: Math.round(cellH), originX, originY, headerH, badgeH });
-    setCalibStep('badgeTop'); // proceed to badge measurement
+    const badgeH = Math.round(cellH / 6);
+    const badgeOffsetY = Math.round(cellH * 0.22);
+    setGrid({ cellW: Math.round(cellW), cellH: Math.round(cellH), originX, originY, headerH, badgeH, badgeOffsetY });
+    setCalibStep('badgeTop');
     setCalibDayInput('');
   };
 
@@ -366,7 +373,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 )}
                 {calibStep === 'badgeTop' && (
                   <div>
-                    <p className="text-sm text-blue-800 font-medium">4/5: 색깔 블록 하나의 <b>윗쪽</b> 경계를 클릭</p>
+                    <p className="text-sm text-blue-800 font-medium">4/5: 같은 셀의 <b>첫 번째 블록 윗쪽</b> 경계를 클릭</p>
                     <button onClick={() => setCalibStep(null)} className="text-xs text-gray-400 mt-1">건너뛰기</button>
                   </div>
                 )}
@@ -406,7 +413,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 }
                 if (r1Shifts.length === 0 && r2Shifts.length === 0) return null;
 
-                const dateRowH = Math.round(grid.cellH * 0.22);
+                const badgeOffsetY = grid.badgeOffsetY;
                 const badgeH = grid.badgeH;
                 const fontSize = Math.max(7, Math.min(11, Math.round(badgeH * 0.7)));
                 const halfW = Math.round(grid.cellW / 2);
@@ -420,13 +427,13 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                         className={`absolute whitespace-nowrap overflow-hidden rounded-sm ${dimmed ? 'opacity-15' : ''}`}
                         style={{
                           left: leftOffset,
-                          width: roomW,
+                          width: Math.round(roomW * 0.9),
                           backgroundColor: getDoctorColor(s.doctorId),
                           fontSize: `${fontSize}px`,
                           lineHeight: 1.2,
                           padding: '0 2px',
                           height: badgeH,
-                          top: dateRowH + shifts.indexOf(s) * badgeH,
+                          top: badgeOffsetY + shifts.indexOf(s) * badgeH,
                         }}
                       >
                         <span className="font-medium">{getDoctorName(s.doctorId)}</span>
