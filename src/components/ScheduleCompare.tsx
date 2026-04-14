@@ -32,15 +32,15 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Calibration: measure cell + badge size from screenshot
-  type CalibStep = null | 'topLeft' | 'bottomRight' | 'enterDay' | 'badgeTop' | 'badgeBottom';
+  // Calibration: measure cell size → calculate CSS scale
+  type CalibStep = null | 'topLeft' | 'bottomRight' | 'enterDay';
   const [calibStep, setCalibStep] = useState<CalibStep>(null);
   const [calibPt1, setCalibPt1] = useState({ x: 0, y: 0 });
   const [calibPt2, setCalibPt2] = useState({ x: 0, y: 0 });
-  const [calibBadgeY1, setCalibBadgeY1] = useState(0);
   const [calibDayInput, setCalibDayInput] = useState('');
+  // scaleX, scaleY, gridX, gridY for CSS transform
   const [calibration, setCalibration] = useState<{
-    cellW: number; cellH: number; gridX: number; gridY: number; headerH: number; badgeH: number;
+    scaleX: number; scaleY: number; gridX: number; gridY: number;
   } | null>(null);
 
   const handleCalibClick = (e: React.MouseEvent) => {
@@ -54,15 +54,6 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     } else if (calibStep === 'bottomRight') {
       setCalibPt2({ x, y });
       setCalibStep('enterDay');
-    } else if (calibStep === 'badgeTop') {
-      setCalibBadgeY1(y);
-      setCalibStep('badgeBottom');
-    } else if (calibStep === 'badgeBottom') {
-      const badgeH = Math.abs(y - calibBadgeY1);
-      if (badgeH >= 2 && calibration) {
-        setCalibration({ ...calibration, badgeH: Math.round(badgeH) });
-      }
-      setCalibStep(null);
     }
   };
 
@@ -112,7 +103,6 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     return days;
   }, [year, month]);
 
-  const calRows = Math.ceil(calendarDays.length / 7);
 
   const applyCalibration = () => {
     const dayNum = parseInt(calibDayInput);
@@ -123,17 +113,22 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     const cellH = Math.abs(calibPt2.y - calibPt1.y);
     if (cellW < 5 || cellH < 5) return;
 
+    // Normal calendar: 840px / 7 = 120px per column, 110px per row, ~24px header
+    const NATURAL_COL_W = 120;
+    const NATURAL_ROW_H = 110;
+    const NATURAL_HEADER_H = 24;
+
+    const scaleX = cellW / NATURAL_COL_W;
+    const scaleY = cellH / NATURAL_ROW_H;
+
     const col = dayIdx % 7;
     const row = Math.floor(dayIdx / 7);
-    const headerH = Math.round(cellH * 0.22);
+    // Grid top-left on the screenshot
     const gridX = Math.round(Math.min(calibPt1.x, calibPt2.x) - col * cellW);
-    const gridY = Math.round(Math.min(calibPt1.y, calibPt2.y) - headerH - row * cellH);
-    // Default badge height: estimate from cell (3 slots, ~3 badges visible = cellH / 7)
-    const badgeH = Math.round(cellH / 7);
+    const gridY = Math.round(Math.min(calibPt1.y, calibPt2.y) - NATURAL_HEADER_H * scaleY - row * cellH);
 
-    setCalibration({ cellW: Math.round(cellW), cellH: Math.round(cellH), gridX, gridY, headerH, badgeH });
-    // Move to badge measurement
-    setCalibStep('badgeTop');
+    setCalibration({ scaleX, scaleY, gridX, gridY });
+    setCalibStep(null);
     setCalibDayInput('');
   };
 
@@ -162,89 +157,69 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
   const timeSlots: TimeSlotKey[] = ['morning', 'afternoon', 'evening'];
 
-  // cal = calibrated cell dimensions (from screenshot measurement), or null = default
-  const renderCalendar = (transparent = false, cal?: { cellW: number; cellH: number; headerH: number; badgeH: number } | null) => {
-    const cw = cal?.cellW;
-    const ch = cal?.cellH;
-    const hh = cal?.headerH;
-    const bh = cal?.badgeH;
-    // Scale text proportionally to badge height
-    const textScale = ch ? Math.max(7, Math.min(11, Math.round(ch / 10))) : 11;
-    const badgeFontSize = bh ? Math.max(6, Math.min(11, Math.round(bh * 0.6))) : null;
-
-    return (
-      <div className={cal ? '' : 'overflow-x-auto'}>
-        <div
-          className={`grid grid-cols-7 ${cal ? '' : 'min-w-[840px]'} ${transparent ? '' : 'border-t border-l border-gray-400'}`}
-          style={cal ? { gridTemplateColumns: `repeat(7, ${cw}px)`, gridTemplateRows: `${hh}px repeat(${calRows}, ${ch}px)` } : undefined}
-        >
-          {dayNames.map((name, i) => (
-            <div key={name} className={`text-center font-bold flex items-center justify-center ${transparent
-              ? 'text-transparent select-none'
-              : `border-b border-r border-gray-400 ${
-                i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
-              }`
-            }`} style={{ fontSize: cal ? `${textScale}px` : undefined, padding: cal ? 0 : '6px 0' }}>{name}</div>
-          ))}
-          {calendarDays.map((day, idx) => {
-            if (day === null) {
-              return <div key={`e-${idx}`} className={`${cal ? '' : 'h-[110px]'} ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`} />;
-            }
-            const dateStr = `${year}-${pad(month)}-${pad(day)}`;
-            const isHolSun = isHolidayOrSunday(dateStr, state.customHolidays);
-            const isSat = isSaturday(dateStr);
-            const holiday = getHolidayName(dateStr);
-            const dayData = structuredShifts.get(dateStr);
-            const hasRoom2 = monthHasRoom2;
-            return (
-              <div key={dateStr} className={`${cal ? 'overflow-hidden flex flex-col' : 'h-[110px]'} ${cal ? 'p-0' : 'p-0.5'} ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
-                <div className={`flex items-baseline gap-0.5 shrink-0 ${transparent ? 'invisible' : ''}`}
-                  style={cal ? { height: Math.round(ch! * 0.15), overflow: 'hidden', paddingLeft: 2 } : undefined}>
-                  <span className={`font-bold ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}
-                    style={{ fontSize: cal ? `${textScale}px` : '11px' }}>{day}</span>
-                  {holiday && !cal && <span className="text-[7px] text-red-500">{holiday}</span>}
-                </div>
-                <div className={`flex flex-col flex-1 min-h-0 ${cal ? 'overflow-hidden' : ''}`}>
-                  {timeSlots.map((slot, slotIdx) => {
-                    const r1 = dayData?.[slot]?.room1 || [];
-                    const r2 = dayData?.[slot]?.room2 || [];
-                    return (
-                      <div key={slot} className={`flex flex-1 min-h-0 overflow-hidden ${!transparent && !cal && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
-                        <div className="flex-1 overflow-hidden" style={cal ? { padding: 0 } : { padding: '2px' }}>
-                          {r1.map(s => (
+  const renderCalendar = (transparent = false) => (
+    <div className="overflow-x-auto">
+      <div className={`grid grid-cols-7 min-w-[840px] ${transparent ? '' : 'border-t border-l border-gray-400'}`}>
+        {dayNames.map((name, i) => (
+          <div key={name} className={`text-center text-xs font-bold py-1.5 ${transparent
+            ? 'text-transparent select-none'
+            : `border-b border-r border-gray-400 ${
+              i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
+            }`
+          }`}>{name}</div>
+        ))}
+        {calendarDays.map((day, idx) => {
+          if (day === null) return <div key={`e-${idx}`} className={`h-[110px] ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`} />;
+          const dateStr = `${year}-${pad(month)}-${pad(day)}`;
+          const isHolSun = isHolidayOrSunday(dateStr, state.customHolidays);
+          const isSat = isSaturday(dateStr);
+          const holiday = getHolidayName(dateStr);
+          const dayData = structuredShifts.get(dateStr);
+          const hasRoom2 = monthHasRoom2;
+          return (
+            <div key={dateStr} className={`h-[110px] p-0.5 ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
+              <div className={`flex items-baseline gap-0.5 mb-0.5 ${transparent ? 'invisible' : ''}`}>
+                <span className={`font-bold text-[11px] ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
+                {holiday && <span className="text-[7px] text-red-500">{holiday}</span>}
+              </div>
+              <div className="flex flex-col">
+                {timeSlots.map((slot, slotIdx) => {
+                  const r1 = dayData?.[slot]?.room1 || [];
+                  const r2 = dayData?.[slot]?.room2 || [];
+                  return (
+                    <div key={slot} className={`flex min-h-[24px] ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
+                      <div className="flex-1 py-0.5 px-0.5">
+                        {r1.map(s => (
+                          <div key={s.id}
+                            className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[2px] rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
+                            style={{ backgroundColor: getDoctorColor(s.doctorId) }}>
+                            <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
+                            <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
+                          </div>
+                        ))}
+                      </div>
+                      {hasRoom2 && (
+                        <div className={`flex-1 py-0.5 px-0.5 ${!transparent ? 'border-l border-dashed border-gray-300' : ''}`}>
+                          {r2.map(s => (
                             <div key={s.id}
-                              className={`rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
-                              style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', lineHeight: cal ? 1.15 : 1.3, padding: cal ? '0 1px' : '1px 2px', margin: 0 }}
-                            >
+                              className={`text-[10px] sm:text-[11px] leading-snug px-1 py-[2px] rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
+                              style={{ backgroundColor: getDoctorColor(s.doctorId) }}>
                               <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
                               <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
                             </div>
                           ))}
                         </div>
-                        {hasRoom2 && (
-                          <div className="flex-1 overflow-hidden" style={cal ? { padding: 0 } : { padding: '2px' }}>
-                            {r2.map(s => (
-                              <div key={s.id}
-                                className={`rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
-                                style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', lineHeight: cal ? 1.15 : 1.3, padding: cal ? '0 1px' : '1px 2px', margin: 0 }}
-                              >
-                                <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
-                                <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
         </div>
       </div>
-    );
-  };
+  );
 
   return (
     <div ref={containerRef}>
@@ -410,14 +385,14 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
             <div>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-center">
                 {calibStep === 'topLeft' && (
-                  <p className="text-sm text-blue-800 font-medium">1/5: 일자가 써있는 셀의 <b>왼쪽 위</b> 모서리를 클릭하세요</p>
+                  <p className="text-sm text-blue-800 font-medium">1/3: 일자가 써있는 셀의 <b>왼쪽 위</b> 모서리를 클릭하세요</p>
                 )}
                 {calibStep === 'bottomRight' && (
-                  <p className="text-sm text-blue-800 font-medium">2/5: 같은 셀의 <b>오른쪽 아래</b> 모서리를 클릭하세요</p>
+                  <p className="text-sm text-blue-800 font-medium">2/3: 같은 셀의 <b>오른쪽 아래</b> 모서리를 클릭하세요</p>
                 )}
                 {calibStep === 'enterDay' && (
                   <div>
-                    <p className="text-sm text-blue-800 font-medium mb-2">3/5: 클릭한 셀의 날짜를 입력하세요</p>
+                    <p className="text-sm text-blue-800 font-medium mb-2">3/3: 클릭한 셀의 날짜를 입력하세요</p>
                     <div className="flex items-center justify-center gap-2">
                       <input type="number" min="1" max="31" value={calibDayInput}
                         onChange={e => setCalibDayInput(e.target.value)}
@@ -429,17 +404,8 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                     </div>
                   </div>
                 )}
-                {calibStep === 'badgeTop' && (
-                  <div>
-                    <p className="text-sm text-blue-800 font-medium">4/5: 아무 색깔 블록(배지)의 <b>위쪽 경계</b>를 클릭하세요</p>
-                    <button onClick={() => setCalibStep(null)} className="text-xs text-gray-400 mt-1 hover:text-gray-600">건너뛰기</button>
-                  </div>
-                )}
-                {calibStep === 'badgeBottom' && (
-                  <p className="text-sm text-blue-800 font-medium">5/5: 같은 블록의 <b>아래쪽 경계</b>를 클릭하세요</p>
-                )}
               </div>
-              {(calibStep === 'topLeft' || calibStep === 'bottomRight' || calibStep === 'badgeTop' || calibStep === 'badgeBottom') && (
+              {(calibStep === 'topLeft' || calibStep === 'bottomRight') && (
                 <div className="border-2 border-blue-400 rounded-lg overflow-auto cursor-crosshair" onClick={handleCalibClick}>
                   <img src={image} alt="스크린샷" className="w-full" draggable={false} />
                 </div>
@@ -447,7 +413,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
             </div>
           )}
 
-          {/* Overlay: screenshot + calibrated calendar */}
+          {/* Overlay: screenshot + normal calendar with CSS scale */}
           {!calibStep && (
             <div className="relative border border-gray-300 rounded-lg overflow-auto select-none" style={{ isolation: 'isolate' }}>
               <div style={{ opacity: diffMode ? 1 : (1 - overlayOpacity) }}>
@@ -460,10 +426,12 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                   mixBlendMode: diffMode ? 'difference' : 'normal',
                   left: calibration ? calibration.gridX : 0,
                   top: calibration ? calibration.gridY : 0,
+                  transform: calibration ? `scale(${calibration.scaleX}, ${calibration.scaleY})` : undefined,
+                  transformOrigin: 'top left',
                   pointerEvents: 'none',
                 }}
               >
-                {renderCalendar(diffMode, calibration)}
+                {renderCalendar(diffMode)}
               </div>
             </div>
           )}
