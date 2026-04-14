@@ -27,6 +27,8 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [filterDoctor, setFilterDoctor] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'screenshot' | 'parsed' | 'overlay'>('screenshot');
   const [overlayOpacity, setOverlayOpacity] = useState(0.7);
+  const [overlayOffset, setOverlayOffset] = useState({ x: 0, y: 0 });
+  const [overlayScale, setOverlayScale] = useState(1);
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -331,11 +333,31 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
         <div>
           <div className="space-y-2 mb-3 px-2">
             {grid && (
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 whitespace-nowrap">투명도</span>
-                <input type="range" min="0" max="1" step="0.05" value={overlayOpacity}
-                  onChange={e => setOverlayOpacity(Number(e.target.value))} className="flex-1 h-2 accent-blue-600" />
-              </div>
+              <>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 whitespace-nowrap w-10">투명도</span>
+                  <input type="range" min="0" max="1" step="0.05" value={overlayOpacity}
+                    onChange={e => setOverlayOpacity(Number(e.target.value))} className="flex-1 h-2 accent-blue-600" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 whitespace-nowrap w-10">좌우</span>
+                  <input type="range" min="-50" max="50" step="1" value={overlayOffset.x}
+                    onChange={e => setOverlayOffset(o => ({ ...o, x: Number(e.target.value) }))} className="flex-1 h-2 accent-green-600" />
+                  <span className="text-xs text-gray-400 w-8 text-right">{overlayOffset.x}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 whitespace-nowrap w-10">상하</span>
+                  <input type="range" min="-50" max="50" step="1" value={overlayOffset.y}
+                    onChange={e => setOverlayOffset(o => ({ ...o, y: Number(e.target.value) }))} className="flex-1 h-2 accent-green-600" />
+                  <span className="text-xs text-gray-400 w-8 text-right">{overlayOffset.y}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 whitespace-nowrap w-10">비율</span>
+                  <input type="range" min="0.8" max="1.2" step="0.005" value={overlayScale}
+                    onChange={e => setOverlayScale(Number(e.target.value))} className="flex-1 h-2 accent-purple-600" />
+                  <span className="text-xs text-gray-400 w-8 text-right">{Math.round(overlayScale * 100)}%</span>
+                </div>
+              </>
             )}
             <div className="flex items-center justify-between flex-wrap gap-1">
               <div className="flex gap-1">
@@ -348,7 +370,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 >{calibStep ? '측정 중...' : grid ? '재측정' : '셀 위치 측정'}</button>
               </div>
               {grid && (
-                <button onClick={() => setGrid(null)}
+                <button onClick={() => { setGrid(null); setOverlayOffset({ x: 0, y: 0 }); setOverlayScale(1); }}
                   className="px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100 rounded">초기화</button>
               )}
             </div>
@@ -400,8 +422,8 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 if (!dayData) return null;
                 const col = idx % 7;
                 const row = Math.floor(idx / 7);
-                const x = grid.originX + col * grid.cellW;
-                const y = grid.originY + grid.headerH + row * grid.cellH;
+                const x = (grid.originX + col * grid.cellW) * overlayScale + overlayOffset.x;
+                const y = (grid.originY + grid.headerH + row * grid.cellH) * overlayScale + overlayOffset.y;
                 const hasRoom2 = monthHasRoom2;
 
                 // Collect room1 and room2 shifts by slot
@@ -419,38 +441,46 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 const halfW = Math.round(grid.cellW / 2);
                 const roomW = hasRoom2 ? halfW : grid.cellW;
 
-                const renderBadges = (shifts: Shift[], leftOffset: number) =>
-                  shifts.map(s => {
-                    const dimmed = filterDoctor !== 'all' && s.doctorId !== filterDoctor;
-                    return (
-                      <div key={s.id}
-                        className={`absolute whitespace-nowrap overflow-hidden rounded-sm ${dimmed ? 'opacity-15' : ''}`}
-                        style={{
-                          left: leftOffset,
-                          width: Math.round(roomW * 0.9),
-                          backgroundColor: getDoctorColor(s.doctorId),
-                          fontSize: `${fontSize}px`,
-                          lineHeight: 1.2,
-                          padding: '0 2px',
-                          height: badgeH,
-                          top: badgeOffsetY + shifts.indexOf(s) * badgeH,
-                        }}
-                      >
-                        <span className="font-medium">{getDoctorName(s.doctorId)}</span>
-                        <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
-                      </div>
-                    );
+                // Position badges by time slot (morning=0, afternoon=1, evening=2)
+                const slotH = (grid.cellH - badgeOffsetY) / 3;
+                const renderRoomBadges = (leftOffset: number) => {
+                  const badges: React.ReactNode[] = [];
+                  timeSlots.forEach((slot, slotIdx) => {
+                    const roomShifts = leftOffset === 0 ? (dayData[slot]?.room1 || []) : (dayData[slot]?.room2 || []);
+                    roomShifts.forEach((s, i) => {
+                      const dimmed = filterDoctor !== 'all' && s.doctorId !== filterDoctor;
+                      badges.push(
+                        <div key={s.id}
+                          className={`absolute whitespace-nowrap overflow-hidden rounded-sm ${dimmed ? 'opacity-15' : ''}`}
+                          style={{
+                            left: leftOffset,
+                            width: Math.round(roomW * 0.9),
+                            backgroundColor: getDoctorColor(s.doctorId),
+                            fontSize: `${fontSize}px`,
+                            lineHeight: 1.2,
+                            padding: '0 2px',
+                            height: badgeH,
+                            top: badgeOffsetY + slotIdx * slotH + i * badgeH,
+                          }}
+                        >
+                          <span className="font-medium">{getDoctorName(s.doctorId)}</span>
+                          <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
+                        </div>
+                      );
+                    });
                   });
+                  return badges;
+                };
 
                 return (
                   <div key={dateStr} className="absolute" style={{
                     left: x, top: y,
-                    width: grid.cellW, height: grid.cellH,
+                    width: grid.cellW * overlayScale, height: grid.cellH * overlayScale,
                     opacity: overlayOpacity,
                     pointerEvents: 'none',
                   }}>
-                    {renderBadges(r1Shifts, 0)}
-                    {hasRoom2 && renderBadges(r2Shifts, halfW)}
+                    {renderRoomBadges(0)}
+                    {hasRoom2 && renderRoomBadges(halfW)}
                   </div>
                 );
               })}
