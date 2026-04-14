@@ -210,11 +210,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                     const r2 = dayData?.[slot]?.room2 || [];
                     return (
                       <div key={slot} className={`flex flex-1 min-h-0 overflow-hidden ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
-                        <div className="flex-1 overflow-hidden" style={cal ? { padding: '0 1px' } : { padding: '2px' }}>
+                        <div className="flex-1 overflow-hidden" style={cal ? { padding: 0 } : { padding: '2px' }}>
                           {r1.map(s => (
                             <div key={s.id}
                               className={`rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
-                              style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', lineHeight: 1.3, padding: cal ? '0 2px' : '1px 2px' }}
+                              style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', lineHeight: cal ? 1.15 : 1.3, padding: cal ? '0 1px' : '1px 2px', margin: 0 }}
                             >
                               <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
                               <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
@@ -222,11 +222,11 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                           ))}
                         </div>
                         {hasRoom2 && (
-                          <div className="flex-1 overflow-hidden" style={cal ? { padding: '0 1px' } : { padding: '2px' }}>
+                          <div className="flex-1 overflow-hidden" style={cal ? { padding: 0 } : { padding: '2px' }}>
                             {r2.map(s => (
                               <div key={s.id}
                                 className={`rounded-sm whitespace-nowrap overflow-hidden ${filterDoctor !== 'all' && s.doctorId !== filterDoctor ? 'opacity-15' : ''}`}
-                                style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', lineHeight: 1.3, padding: cal ? '0 2px' : '1px 2px' }}
+                                style={{ backgroundColor: getDoctorColor(s.doctorId), fontSize: badgeFontSize ? `${badgeFontSize}px` : '10px', lineHeight: cal ? 1.15 : 1.3, padding: cal ? '0 1px' : '1px 2px', margin: 0 }}
                               >
                                 <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
                                 <span className={`ml-0.5 ${transparent ? 'text-transparent' : 'text-gray-700'}`}>({pad(s.startHour)}-{pad(s.endHour)})</span>
