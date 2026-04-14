@@ -380,41 +380,56 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 const row = Math.floor(idx / 7);
                 const x = grid.originX + col * grid.cellW;
                 const y = grid.originY + grid.headerH + row * grid.cellH;
-                // Collect all shifts for this day in order
-                const allShifts: Shift[] = [];
+                const hasRoom2 = monthHasRoom2;
+
+                // Collect room1 and room2 shifts by slot
+                const r1Shifts: Shift[] = [];
+                const r2Shifts: Shift[] = [];
                 for (const slot of timeSlots) {
-                  allShifts.push(...(dayData[slot]?.room1 || []));
-                  if (monthHasRoom2) allShifts.push(...(dayData[slot]?.room2 || []));
+                  r1Shifts.push(...(dayData[slot]?.room1 || []));
+                  r2Shifts.push(...(dayData[slot]?.room2 || []));
                 }
-                if (allShifts.length === 0) return null;
-                const badgeH = Math.round(grid.cellH / (allShifts.length + 1.5));
+                if (r1Shifts.length === 0 && r2Shifts.length === 0) return null;
+
+                const maxBadges = Math.max(r1Shifts.length, hasRoom2 ? r2Shifts.length : 0, 1);
+                const dateRowH = Math.round(grid.cellH * 0.14);
+                const availH = grid.cellH - dateRowH;
+                const badgeH = Math.min(Math.round(availH / maxBadges), Math.round(grid.cellH / 4));
                 const fontSize = Math.max(7, Math.min(11, Math.round(badgeH * 0.7)));
+                const roomW = hasRoom2 ? Math.floor((grid.cellW - 2) / 2) : grid.cellW - 2;
+
+                const renderBadges = (shifts: Shift[], leftOffset: number) =>
+                  shifts.map(s => {
+                    const dimmed = filterDoctor !== 'all' && s.doctorId !== filterDoctor;
+                    return (
+                      <div key={s.id}
+                        className={`absolute whitespace-nowrap overflow-hidden rounded-sm ${dimmed ? 'opacity-15' : ''}`}
+                        style={{
+                          left: leftOffset,
+                          width: roomW,
+                          backgroundColor: getDoctorColor(s.doctorId),
+                          fontSize: `${fontSize}px`,
+                          lineHeight: 1.2,
+                          padding: '0 2px',
+                          height: badgeH,
+                          top: dateRowH + shifts.indexOf(s) * badgeH,
+                        }}
+                      >
+                        <span className="font-medium">{getDoctorName(s.doctorId)}</span>
+                        <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
+                      </div>
+                    );
+                  });
 
                 return (
                   <div key={dateStr} className="absolute" style={{
-                    left: x + 1, top: y + Math.round(grid.cellH * 0.15),
-                    width: grid.cellW - 2,
+                    left: x + 1, top: y,
+                    width: grid.cellW - 2, height: grid.cellH,
                     opacity: overlayOpacity,
                     pointerEvents: 'none',
                   }}>
-                    {allShifts.map(s => {
-                      const dimmed = filterDoctor !== 'all' && s.doctorId !== filterDoctor;
-                      return (
-                        <div key={s.id}
-                          className={`whitespace-nowrap overflow-hidden rounded-sm ${dimmed ? 'opacity-15' : ''}`}
-                          style={{
-                            backgroundColor: getDoctorColor(s.doctorId),
-                            fontSize: `${fontSize}px`,
-                            lineHeight: 1.2,
-                            padding: '0 2px',
-                            height: badgeH,
-                          }}
-                        >
-                          <span className="font-medium">{getDoctorName(s.doctorId)}</span>
-                          <span className="text-gray-700 ml-0.5">({pad(s.startHour)}-{pad(s.endHour)})</span>
-                        </div>
-                      );
-                    })}
+                    {renderBadges(r1Shifts, 0)}
+                    {hasRoom2 && renderBadges(r2Shifts, roomW)}
                   </div>
                 );
               })}
