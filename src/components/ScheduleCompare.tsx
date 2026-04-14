@@ -140,7 +140,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     return (
       <div
         key={s.id}
-        className={`${compact ? 'text-[7px] leading-tight px-0.5 py-0' : 'text-[10px] sm:text-[11px] leading-snug px-1 py-[2px]'} rounded-sm whitespace-nowrap overflow-hidden ${dimmed ? 'opacity-15' : ''}`}
+        className={`${compact ? 'text-[9px] leading-tight px-0.5 py-[1px]' : 'text-[10px] sm:text-[11px] leading-snug px-1 py-[2px]'} rounded-sm whitespace-nowrap overflow-hidden ${dimmed ? 'opacity-15' : ''}`}
         style={{ backgroundColor: getDoctorColor(s.doctorId) }}
       >
         <span className={`font-medium ${transparent ? 'text-transparent' : ''}`}>{getDoctorName(s.doctorId)}</span>
@@ -149,16 +149,17 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     );
   };
 
-  // fitContainer: cells flex to fill container (for overlay), no fixed sizes
+  // fitContainer: cells flex to fill container (for overlay)
+  // Proportions matched to 24clinic.kr calendar layout
   const renderCalendar = (transparent = false, fitContainer = false) => (
     <div className={fitContainer ? 'h-full' : 'overflow-x-auto'}>
       <div
         className={`grid grid-cols-7 ${fitContainer ? '' : 'min-w-[840px]'} ${transparent ? '' : 'border-t border-l border-gray-400'}`}
-        style={fitContainer ? { height: '100%', gridTemplateRows: `auto repeat(${calRows}, 1fr)` } : undefined}
+        style={fitContainer ? { height: '100%', gridTemplateRows: `minmax(0, 0.22fr) repeat(${calRows}, 1fr)` } : undefined}
       >
         {/* Day headers */}
         {dayNames.map((name, i) => (
-          <div key={name} className={`text-center font-bold ${fitContainer ? 'text-[8px] py-0.5' : 'text-xs py-1.5'} ${transparent
+          <div key={name} className={`text-center font-bold flex items-center justify-center ${fitContainer ? 'text-[9px]' : 'text-xs py-1.5'} ${transparent
             ? 'text-transparent select-none'
             : `border-b border-r border-gray-400 ${
               i === 0 ? 'bg-gray-700 text-red-300' : i === 6 ? 'bg-gray-700 text-blue-300' : 'bg-gray-700 text-white'
@@ -179,25 +180,25 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
           const hasRoom2 = monthHasRoom2;
 
           return (
-            <div key={dateStr} className={`${fitContainer ? 'min-h-0 overflow-hidden' : 'h-[110px]'} p-0.5 ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
+            <div key={dateStr} className={`${fitContainer ? 'min-h-0 overflow-hidden flex flex-col' : 'h-[110px]'} p-0.5 ${transparent ? '' : 'border-b border-r border-gray-300 bg-white'}`}>
               {/* Date number */}
-              <div className={`flex items-baseline gap-0.5 ${transparent ? 'invisible' : ''}`}>
-                <span className={`font-bold ${fitContainer ? 'text-[8px]' : 'text-[11px]'} ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
+              <div className={`flex items-baseline gap-0.5 ${transparent ? 'invisible' : ''} ${fitContainer ? 'shrink-0' : ''}`}>
+                <span className={`font-bold ${fitContainer ? 'text-[10px]' : 'text-[11px]'} ${isHolSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-800'}`}>{day}</span>
                 {holiday && !fitContainer && <span className="text-[7px] text-red-500">{holiday}</span>}
               </div>
 
               {/* Shift slots */}
-              <div className={`flex flex-col ${fitContainer ? 'gap-0' : ''}`}>
+              <div className={`flex flex-col ${fitContainer ? 'flex-1 min-h-0' : ''}`}>
                 {timeSlots.map((slot, slotIdx) => {
                   const r1 = dayData?.[slot]?.room1 || [];
                   const r2 = dayData?.[slot]?.room2 || [];
                   return (
-                    <div key={slot} className={`flex ${fitContainer ? 'min-h-0' : 'min-h-[24px]'} ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
-                      <div className="flex-1 py-0.5 px-0.5">
+                    <div key={slot} className={`flex ${fitContainer ? 'min-h-0 flex-1' : 'min-h-[24px]'} ${!transparent && slotIdx > 0 ? 'border-t border-dashed border-gray-300' : ''}`}>
+                      <div className={`flex-1 ${fitContainer ? 'px-0.5 py-0' : 'py-0.5 px-0.5'}`}>
                         {r1.map(s => renderShiftBadge(s, transparent, fitContainer))}
                       </div>
                       {hasRoom2 && (
-                        <div className={`flex-1 py-0.5 px-0.5 ${!transparent ? 'border-l border-dashed border-gray-300' : ''}`}>
+                        <div className={`flex-1 ${fitContainer ? 'px-0.5 py-0' : 'py-0.5 px-0.5'} ${!transparent ? 'border-l border-dashed border-gray-300' : ''}`}>
                           {r2.map(s => renderShiftBadge(s, transparent, fitContainer))}
                         </div>
                       )}
