@@ -21,6 +21,7 @@ interface AppState {
   specialRatePeriods: SpecialRatePeriod[];
   customHolidays: string[];
   branchName: string;
+  availabilityDeadline?: number; // day of month (e.g. 20 = 매월 20일 자정까지)
 }
 
 interface AppContextType {
@@ -45,12 +46,18 @@ interface AppContextType {
   importData: (data: Record<string, unknown>) => void;
   resetData: () => void;
 
+  // Availability deadline
+  setAvailabilityDeadline: (day: number) => void;
+
   // Auth & User
   firebaseUser: User | null;
   currentUser: UserProfile | null;
   authLoading: boolean;
   needsRegistration: boolean;
   isAdmin: boolean;
+  adminPreview: boolean;
+  toggleAdminPreview: () => void;
+  effectiveIsAdmin: boolean; // false when preview mode
   signIn: () => Promise<void>;
   signOut: () => void;
   registerUser: (doctorName: string) => Promise<{ success: boolean; error?: string }>;
@@ -497,6 +504,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = currentUser?.role === 'admin';
 
+  // Admin preview mode: admin can toggle to see app as regular doctor
+  const [adminPreview, setAdminPreview] = useState(false);
+  const toggleAdminPreview = () => setAdminPreview(prev => !prev);
+  const effectiveIsAdmin = isAdmin && !adminPreview;
+
+  const setAvailabilityDeadline = (day: number) => {
+    setState(s => ({ ...s, availabilityDeadline: day }));
+  };
+
   return (
     <AppContext.Provider value={{
       state,
@@ -507,7 +523,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleHoliday, setCustomHolidays, setBranchName,
       getShiftsForMonth, getShiftsForDoctor,
       importData, resetData,
-      firebaseUser, currentUser, authLoading, needsRegistration, isAdmin,
+      setAvailabilityDeadline,
+      firebaseUser, currentUser, authLoading, needsRegistration,
+      isAdmin, adminPreview, toggleAdminPreview, effectiveIsAdmin,
       signIn, signOut, registerUser,
       archiveDoctor, restoreDoctor, activeDoctors,
       allUsers, refreshUsers, setRole, removeUser,

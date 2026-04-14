@@ -40,7 +40,21 @@ function slotChar(status?: SlotStatus): string {
 }
 
 export default function Availability({ year, month, onMonthChange }: Props) {
-  const { isAdmin, activeDoctors, submitMyAvailability, loadMyAvailability, loadAllAvailabilityForMonth } = useAppStore();
+  const { effectiveIsAdmin, activeDoctors, submitMyAvailability, loadMyAvailability, loadAllAvailabilityForMonth, state } = useAppStore();
+
+  // Deadline check: can submit for next month only until deadline day of current month
+  const deadline = state.availabilityDeadline || 20;
+  const now = new Date();
+  const isDeadlinePassed = useMemo(() => {
+    // Target month is year-month. You can submit until the previous month's deadline day at midnight.
+    const targetDate = new Date(year, month - 1, 1); // 1st of target month
+    // Deadline: previous month's deadline day, 23:59:59
+    const deadlineDate = new Date(targetDate.getFullYear(), targetDate.getMonth() - 1, deadline, 23, 59, 59);
+    return now > deadlineDate;
+  }, [year, month, deadline, now]);
+
+  // Deadline passed and not admin → locked
+  const deadlineLocked = isDeadlinePassed && !effectiveIsAdmin;
 
   const [days, setDays] = useState<DaysMap>({});
   const [submitted, setSubmitted] = useState(false);
@@ -122,10 +136,10 @@ export default function Availability({ year, month, onMonthChange }: Props) {
 
   // Admin: load all
   useEffect(() => {
-    if (isAdmin && viewAll) {
+    if (effectiveIsAdmin && viewAll) {
       loadAllAvailabilityForMonth(monthStr).then(setAllData);
     }
-  }, [isAdmin, viewAll, monthStr, loadAllAvailabilityForMonth]);
+  }, [effectiveIsAdmin, viewAll, monthStr, loadAllAvailabilityForMonth]);
 
   const calendarDays = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1);
@@ -281,8 +295,18 @@ export default function Availability({ year, month, onMonthChange }: Props) {
         </div>
       </div>
 
+      {/* Deadline warning */}
+      {deadlineLocked && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3 text-center">
+          <span className="text-sm text-red-700 font-medium">마감 완료</span>
+          <p className="text-xs text-red-500 mt-1">
+            매월 {deadline}일 자정까지 제출 가능합니다. 수정이 필요하면 관리자에게 문의하세요.
+          </p>
+        </div>
+      )}
+
       {/* Submitted overlay message */}
-      {submitted && !editing && (
+      {submitted && !editing && !deadlineLocked && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3 flex items-center justify-between">
           <div>
             <span className="text-sm text-green-800 font-medium">제출 완료</span>
@@ -300,7 +324,7 @@ export default function Availability({ year, month, onMonthChange }: Props) {
       )}
 
       {/* Calendar */}
-      <div className={`bg-white rounded-lg border border-gray-200 overflow-hidden mb-3 ${!editing ? 'opacity-60 pointer-events-none' : ''}`}>
+      <div className={`bg-white rounded-lg border border-gray-200 overflow-hidden mb-3 ${(!editing || deadlineLocked) ? 'opacity-60 pointer-events-none' : ''}`}>
         <div className="grid grid-cols-7">
           {/* Header row */}
           {dayNames.map((name, i) => (
@@ -351,7 +375,7 @@ export default function Availability({ year, month, onMonthChange }: Props) {
       </div>
 
       {/* Fill remaining */}
-      {editing && (
+      {editing && !deadlineLocked && (
         <div className="flex items-center gap-2 mb-3 px-1">
           <span className="text-xs text-gray-500">나머지 채우기:</span>
           <button onClick={() => fillRemaining('available')}
@@ -381,7 +405,7 @@ export default function Availability({ year, month, onMonthChange }: Props) {
       </div>
 
       {/* Action buttons */}
-      {editing && (
+      {editing && !deadlineLocked && (
         <div className="flex gap-2">
           <button onClick={handleSaveDraft} disabled={saving}
             className="flex-1 py-3 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 active:bg-gray-100 disabled:opacity-50">
@@ -419,7 +443,7 @@ export default function Availability({ year, month, onMonthChange }: Props) {
       )}
 
       {/* Admin: view all */}
-      {isAdmin && (
+      {effectiveIsAdmin && (
         <div className="mt-6">
           <button onClick={() => setViewAll(!viewAll)}
             className="text-sm text-blue-600 font-medium mb-3">
