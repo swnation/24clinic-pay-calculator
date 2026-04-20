@@ -5,6 +5,7 @@ interface CalendarEvent {
   date: string; // YYYY-MM-DD
   startHour: number;
   endHour: number;
+  color?: string; // hex color
 }
 
 interface MergedBlock {
@@ -65,9 +66,47 @@ function mergeShiftsIntoBlocks(shifts: Shift[]): MergedBlock[] {
   return blocks;
 }
 
+// Map hex color to closest Google Calendar color ID (1-11)
+function hexToGoogleColorId(hex: string): string {
+  const colors: [string, string][] = [
+    ['1', '#a4bdfc'], // Lavender
+    ['2', '#7ae7bf'], // Sage
+    ['3', '#dbadff'], // Grape
+    ['4', '#ff887c'], // Flamingo
+    ['5', '#fbd75b'], // Banana
+    ['6', '#ffb878'], // Tangerine
+    ['7', '#46d6db'], // Peacock
+    ['8', '#e1e1e1'], // Graphite
+    ['9', '#5484ed'], // Blueberry
+    ['10', '#51b749'], // Basil
+    ['11', '#dc2127'], // Tomato
+  ];
+
+  const hexToRgb = (h: string) => {
+    const r = parseInt(h.slice(1, 3), 16);
+    const g = parseInt(h.slice(3, 5), 16);
+    const b = parseInt(h.slice(5, 7), 16);
+    return [r, g, b];
+  };
+
+  const [r, g, b] = hexToRgb(hex);
+  let closest = '5'; // default: Banana
+  let minDist = Infinity;
+
+  for (const [id, colorHex] of colors) {
+    const [cr, cg, cb] = hexToRgb(colorHex);
+    const dist = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2;
+    if (dist < minDist) {
+      minDist = dist;
+      closest = id;
+    }
+  }
+  return closest;
+}
+
 export function generateCalendarEvents(
   shifts: Shift[],
-  _doctor: Doctor,
+  doctor: Doctor,
   branchName: string
 ): CalendarEvent[] {
   // Group shifts by date
@@ -90,7 +129,7 @@ export function generateCalendarEvents(
 
     if (isFullShift) {
       // 풀근무: 잠실1 또는 잠실2 (시간 없이)
-      events.push({ title: `${branchName}${blocks[0].room}`, date, startHour: 9, endHour: 24 });
+      events.push({ title: `${branchName}${blocks[0].room}`, date, startHour: 9, endHour: 24, color: doctor.color });
     } else {
       const parts = blocks.map(b =>
         `${branchName}${b.room}(${pad(b.startHour)}-${pad(b.endHour)})`
@@ -100,6 +139,7 @@ export function generateCalendarEvents(
         date,
         startHour: blocks[0].startHour,
         endHour: blocks[blocks.length - 1].endHour,
+        color: doctor.color,
       });
     }
   }
@@ -119,7 +159,13 @@ function formatDateTimeICS(dateStr: string, hour: number): string {
   return `${y}${m}${d}T${pad(hour)}0000`;
 }
 
+function formatUTCNow(): string {
+  const now = new Date();
+  return `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+}
+
 export function generateICS(events: CalendarEvent[]): string {
+  const now = formatUTCNow();
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -127,17 +173,40 @@ export function generateICS(events: CalendarEvent[]): string {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'X-WR-CALNAME:24시 열린의원 근무',
+    'X-WR-TIMEZONE:Asia/Seoul',
+    // VTIMEZONE for Google Calendar compatibility
+    'BEGIN:VTIMEZONE',
+    'TZID:Asia/Seoul',
+    'X-LIC-LOCATION:Asia/Seoul',
+    'BEGIN:STANDARD',
+    'TZOFFSETFROM:+0900',
+    'TZOFFSETTO:+0900',
+    'TZNAME:KST',
+    'DTSTART:19700101T000000',
+    'END:STANDARD',
+    'END:VTIMEZONE',
   ];
 
   for (const event of events) {
-    const uid = `${event.date}-${event.startHour}-${event.endHour}@24clinic`;
+    const uid = `${event.date}-${event.startHour}-${event.endHour}-${now}@24clinic`;
+    const colorId = event.color ? hexToGoogleColorId(event.color) : '5';
     lines.push(
       'BEGIN:VEVENT',
       `UID:${uid}`,
+      `DTSTAMP:${now}`,
+      `CREATED:${now}`,
+      `LAST-MODIFIED:${now}`,
       `DTSTART;TZID=Asia/Seoul:${formatDateTimeICS(event.date, event.startHour)}`,
       `DTEND;TZID=Asia/Seoul:${formatDateTimeICS(event.date, event.endHour)}`,
       `SUMMARY:${event.title}`,
+      `COLOR:${event.color || '#FBD75B'}`,
+      `X-GOOGLE-CALENDAR-CONTENT-COLOR:${event.color || '#FBD75B'}`,
+      `X-APPLE-CALENDAR-COLOR:${event.color || '#FBD75B'}`,
+      `X-OUTLOOK-COLOR:${event.color || '#FBD75B'}`,
+      // Google Calendar uses numeric color IDs via categories
+      `CATEGORIES:color${colorId}`,
       'STATUS:CONFIRMED',
+      'TRANSP:OPAQUE',
       'END:VEVENT',
     );
   }
