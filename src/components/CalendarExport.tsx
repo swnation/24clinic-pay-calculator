@@ -12,9 +12,24 @@ function pad(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
+const GOOGLE_COLORS: { id: string; hex: string; name: string }[] = [
+  { id: '1', hex: '#a4bdfc', name: '라벤더' },
+  { id: '2', hex: '#7ae7bf', name: '세이지' },
+  { id: '3', hex: '#dbadff', name: '포도' },
+  { id: '4', hex: '#ff887c', name: '플라밍고' },
+  { id: '5', hex: '#fbd75b', name: '바나나' },
+  { id: '6', hex: '#ffb878', name: '귤' },
+  { id: '7', hex: '#46d6db', name: '공작' },
+  { id: '8', hex: '#e1e1e1', name: '흑연' },
+  { id: '9', hex: '#5484ed', name: '블루베리' },
+  { id: '10', hex: '#51b749', name: '바질' },
+  { id: '11', hex: '#dc2127', name: '토마토' },
+];
+
 export default function CalendarExport({ year, month, onMonthChange }: Props) {
   const { state, getShiftsForDoctor } = useAppStore();
   const [selectedDoctor, setSelectedDoctor] = useState(state.doctors[0]?.id || '');
+  const [selectedColor, setSelectedColor] = useState<string | null>(null); // null = auto (doctor color)
 
   const monthStr = `${year}-${pad(month)}`;
   const doctor = state.doctors.find(d => d.id === selectedDoctor);
@@ -26,8 +41,12 @@ export default function CalendarExport({ year, month, onMonthChange }: Props) {
 
   const events = useMemo(() => {
     if (!doctor) return [];
-    return generateCalendarEvents(doctorShifts, doctor, state.branchName);
-  }, [doctorShifts, doctor, state.branchName]);
+    const evts = generateCalendarEvents(doctorShifts, doctor, state.branchName);
+    if (selectedColor) {
+      return evts.map(e => ({ ...e, color: selectedColor }));
+    }
+    return evts;
+  }, [doctorShifts, doctor, state.branchName, selectedColor]);
 
   const handleExport = () => {
     if (!doctor || events.length === 0) return;
@@ -72,6 +91,28 @@ export default function CalendarExport({ year, month, onMonthChange }: Props) {
             {d.name}
           </button>
         ))}
+      </div>
+
+      {/* Color picker */}
+      <div className="mb-6">
+        <p className="text-xs text-gray-500 mb-2 text-center">캘린더 색상</p>
+        <div className="flex flex-wrap gap-2 justify-center">
+          <button
+            onClick={() => setSelectedColor(null)}
+            className={`w-7 h-7 rounded-full border-2 ${!selectedColor ? 'border-gray-700 ring-2 ring-gray-400' : 'border-gray-300'}`}
+            style={{ backgroundColor: doctor?.color || '#E0E0E0' }}
+            title="자동 (의사 색상)"
+          />
+          {GOOGLE_COLORS.map(c => (
+            <button
+              key={c.id}
+              onClick={() => setSelectedColor(c.hex)}
+              className={`w-7 h-7 rounded-full border-2 ${selectedColor === c.hex ? 'border-gray-700 ring-2 ring-gray-400' : 'border-gray-300'}`}
+              style={{ backgroundColor: c.hex }}
+              title={c.name}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Info */}
