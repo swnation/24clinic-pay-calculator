@@ -40,7 +40,8 @@ function slotChar(status?: SlotStatus): string {
 }
 
 export default function Availability({ year, month, onMonthChange }: Props) {
-  const { effectiveIsAdmin, activeDoctors, submitMyAvailability, loadMyAvailability, loadAllAvailabilityForMonth, state } = useAppStore();
+  const { effectiveIsAdmin, activeDoctors, currentUser, submitMyAvailability, loadMyAvailability, loadDoctorAvailability, loadAllAvailabilityForMonth, state } = useAppStore();
+  const [viewingDoctorId, setViewingDoctorId] = useState<string | null>(null); // null = my own
 
   // Deadline check: can submit for next month only until deadline day of current month
   const deadline = state.availabilityDeadline || 20;
@@ -110,7 +111,8 @@ export default function Availability({ year, month, onMonthChange }: Props) {
     return () => window.removeEventListener('keydown', handleKey);
   }, [undo, redo]);
 
-  // Load
+  // Load my own or another doctor's availability
+  const isViewingOther = viewingDoctorId !== null && viewingDoctorId !== currentUser?.doctorId;
   useEffect(() => {
     setDays({});
     setHistory([{}]);
@@ -120,19 +122,27 @@ export default function Availability({ year, month, onMonthChange }: Props) {
     setLastSubmitted(null);
     setNoteDay(null);
 
-    loadMyAvailability(monthStr).then(data => {
+    const loader = isViewingOther
+      ? loadDoctorAvailability(viewingDoctorId!, monthStr)
+      : loadMyAvailability(monthStr);
+
+    loader.then(data => {
       if (data) {
         setDays(data.days || {});
         setHistory([data.days || {}]);
         setHistoryIdx(0);
         if (!data.isDraft && data.submittedAt) {
           setSubmitted(true);
-          setEditing(false);
+          setEditing(!isViewingOther); // read-only when viewing others
           setLastSubmitted(data.submittedAt);
+        } else if (isViewingOther) {
+          setEditing(false); // always read-only when viewing others
         }
+      } else if (isViewingOther) {
+        setEditing(false); // no data to edit
       }
     });
-  }, [monthStr, loadMyAvailability]);
+  }, [monthStr, loadMyAvailability, loadDoctorAvailability, viewingDoctorId, isViewingOther]);
 
   // Admin: load all
   useEffect(() => {
@@ -278,6 +288,35 @@ export default function Availability({ year, month, onMonthChange }: Props) {
         <button onClick={nextMonth} className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none">&gt;</button>
       </div>
 
+      {/* Doctor selector - view any doctor's schedule */}
+      <div className="flex flex-wrap gap-1.5 mb-3 justify-center">
+        <button
+          onClick={() => setViewingDoctorId(null)}
+          className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
+            !viewingDoctorId ? 'border-gray-700 bg-white shadow-sm' : 'border-gray-200 opacity-50'
+          }`}
+        >내 스케줄</button>
+        {activeDoctors.filter(d => d.id !== currentUser?.doctorId).map(d => (
+          <button key={d.id}
+            onClick={() => setViewingDoctorId(d.id)}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
+              viewingDoctorId === d.id ? 'border-gray-700 shadow-sm' : 'border-gray-200 opacity-50'
+            }`}
+            style={{ backgroundColor: d.color }}
+          >{d.name}</button>
+        ))}
+      </div>
+
+      {/* Read-only indicator */}
+      {isViewingOther && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 mb-3 text-center">
+          <p className="text-xs text-gray-600">
+            <b>{activeDoctors.find(d => d.id === viewingDoctorId)?.name}</b>의 스케줄 보기 (읽기 전용)
+            {!lastSubmitted && <span className="text-gray-400 ml-2">미제출</span>}
+          </p>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-3 px-1">
         <div className="flex gap-1">
@@ -306,7 +345,7 @@ export default function Availability({ year, month, onMonthChange }: Props) {
       )}
 
       {/* Submitted overlay message */}
-      {submitted && !editing && !deadlineLocked && (
+      {submitted && !editing && !deadlineLocked && !isViewingOther && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3 flex items-center justify-between">
           <div>
             <span className="text-sm text-green-800 font-medium">제출 완료</span>
