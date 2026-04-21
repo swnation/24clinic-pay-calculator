@@ -81,6 +81,7 @@ interface AppContextType {
   // Availability
   submitMyAvailability: (month: string, days: Record<string, DaySlotAvailability>, isDraft: boolean) => Promise<boolean>;
   loadMyAvailability: (month: string) => Promise<AvailabilityData | null>;
+  loadDoctorAvailability: (doctorId: string, month: string) => Promise<AvailabilityData | null>;
   loadAllAvailabilityForMonth: (month: string) => Promise<AvailabilityData[]>;
 
   // Save
@@ -496,6 +497,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return loadAvailability(currentUser.doctorId, month);
   }, [currentUser]);
 
+  const loadDoctorAvailability = useCallback(async (doctorId: string, month: string) => {
+    return loadAvailability(doctorId, month);
+  }, []);
+
   const loadAllAvailabilityForMonth = useCallback(async (month: string) => {
     return loadAllAvailability(month);
   }, []);
@@ -540,7 +545,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       archiveDoctor, restoreDoctor, activeDoctors,
       allUsers, refreshUsers, setRole, removeUser,
       updateMyRates, updateMyMonthlyRate, removeMyMonthlyRate,
-      submitMyAvailability, loadMyAvailability, loadAllAvailabilityForMonth,
+      submitMyAvailability, loadMyAvailability, loadDoctorAvailability, loadAllAvailabilityForMonth,
       saveStatus, saveNow,
     }}>
       {children}
