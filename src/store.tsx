@@ -3,7 +3,7 @@ import type { Doctor, Shift, RatesBySlot, BranchMonthlyRate, SpecialRatePeriod }
 import { DEFAULT_RATES, DOCTOR_COLORS } from './types';
 import { getKoreanHolidaysForYear } from './utils/holidays';
 import {
-  auth, signInWithGoogle, signOutGoogle,
+  auth, signInWithGoogle, signOutGoogle, consumeRedirectResult,
   getUserProfile, setUserProfile, updateUserRole, deleteUserProfile, getAllUsers,
   loadAppData, saveAppData, updateUserProfileField,
   saveAvailability, loadAvailability, loadAllAvailability,
@@ -174,6 +174,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Firebase Auth listener
   useEffect(() => {
+    // GitHub Pages 등에서는 signInWithRedirect 후 페이지 복귀 시 결과를 한 번 소비해야 한다.
+    // 결과 자체는 onAuthStateChanged가 곧 emit하므로 별도 상태 갱신은 불필요.
+    consumeRedirectResult();
+
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {

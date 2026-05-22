@@ -1,73 +1,42 @@
-# React + TypeScript + Vite
+# 24시 열린의원 급여 계산기
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript + Vite + Firebase 기반 클리닉 스케줄/급여 계산기.
 
-Currently, two official plugins are available:
+GitHub Pages로 배포되며, Firebase Auth(Google 로그인) + Firestore를 사용합니다.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 개발
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 빌드
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run build
 ```
+
+## Firebase 설정
+
+### 1. Firestore 보안 규칙 (필수)
+
+로그인 후 `Missing or insufficient permissions` 오류가 발생하면 규칙이 배포되지 않은 것입니다.
+
+저장소의 `firestore.rules` 내용을 [Firebase Console](https://console.firebase.google.com) → Firestore Database → 규칙 탭에 붙여넣고 **게시(Publish)** 합니다.
+
+또는 Firebase CLI로 배포:
+
+```bash
+npm install -g firebase-tools
+firebase login
+firebase deploy --only firestore:rules
+```
+
+### 2. 인증 도메인 등록
+
+[Firebase Console](https://console.firebase.google.com) → Authentication → Settings → Authorized domains 에 배포 도메인을 추가합니다. (예: `swnation.github.io`)
+
+### 3. 로그인 방식
+
+GitHub Pages는 `Cross-Origin-Opener-Policy: same-origin` 헤더를 강제하기 때문에 `signInWithPopup`이 정상 동작하지 않습니다. 본 앱은 배포 환경에서는 자동으로 `signInWithRedirect`로 동작하고, `localhost`에서는 popup으로 동작합니다 (`src/services/firebase.ts`).
