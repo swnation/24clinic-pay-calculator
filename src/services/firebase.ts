@@ -1,5 +1,9 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, type User } from 'firebase/auth';
+import {
+  getAuth, GoogleAuthProvider,
+  signInWithPopup, signInWithRedirect, getRedirectResult,
+  signOut as fbSignOut, type User,
+} from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, getDocs, collection, query, where } from 'firebase/firestore';
 
 // TODO: Firebase Console에서 프로젝트 생성 후 아래 값을 채워주세요
@@ -25,9 +29,31 @@ const googleProvider = new GoogleAuthProvider();
 
 // --- Auth ---
 
-export async function signInWithGoogle(): Promise<User> {
+// GitHub Pages 등 COOP 헤더가 강제되는 환경에서는 popup이 window.close를 호출할 수 없어
+// 로그인이 완료되지 않을 수 있다. 기본은 redirect, 로컬 dev에서만 popup 사용.
+function shouldUseRedirect(): boolean {
+  if (typeof window === 'undefined') return true;
+  const host = window.location.hostname;
+  return host !== 'localhost' && host !== '127.0.0.1';
+}
+
+export async function signInWithGoogle(): Promise<User | null> {
+  if (shouldUseRedirect()) {
+    await signInWithRedirect(auth, googleProvider);
+    return null; // 리다이렉트 후 onAuthStateChanged / getRedirectResult가 처리
+  }
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
+}
+
+export async function consumeRedirectResult(): Promise<User | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    return result?.user ?? null;
+  } catch (e) {
+    console.error('Redirect result error:', e);
+    return null;
+  }
 }
 
 export async function signOutGoogle(): Promise<void> {

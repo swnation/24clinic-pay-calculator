@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 사용자 프로필
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // 공유 앱 데이터 (의사 목록, 시프트, 요율 등)
+    match /appData/{doc} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // 가능일 (의사별 월별)
+    match /availability/{doc} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+  }
+}
