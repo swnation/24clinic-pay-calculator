@@ -3,6 +3,7 @@ import type { RatesBySlot, DayType, TimeSlot, SpecialRatePeriod } from '../types
 import { DAY_TYPE_LABELS, rateKey, DOCTOR_COLORS } from '../types';
 import { useAppStore } from '../store';
 import { isKoreanHoliday, getHolidayName, getKoreanHolidaysForYear } from '../utils/holidays';
+import { doctorName, doctorColor } from '../utils/calendar';
 
 const DAY_TYPES: DayType[] = ['weekday', 'saturday', 'sunday', 'holiday'];
 const TIME_SLOTS: TimeSlot[] = ['morning', 'afternoon', 'evening'];
@@ -147,8 +148,8 @@ function UserManagement() {
 
   if (!effectiveIsAdmin) return null;
 
-  const getDoctorName = (doctorId: string) => state.doctors.find(d => d.id === doctorId)?.name || '?';
-  const getDoctorColor = (doctorId: string) => state.doctors.find(d => d.id === doctorId)?.color || '#E0E0E0';
+  const getDoctorName = (doctorId: string) => doctorName(state.doctors, doctorId);
+  const getDoctorColor = (doctorId: string) => doctorColor(state.doctors, doctorId);
 
   return (
     <section className="bg-white rounded-lg border border-gray-200 p-6">

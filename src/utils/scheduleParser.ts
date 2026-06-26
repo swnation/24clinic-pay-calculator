@@ -1,3 +1,5 @@
+import { pad } from './calendar';
+
 export interface ParsedShift {
   doctorName: string;
   date: string; // YYYY-MM-DD
@@ -12,10 +14,6 @@ export interface ParseResult {
   branchName: string;
   shifts: ParsedShift[];
   doctorNames: string[];
-}
-
-function pad(n: number): string {
-  return n.toString().padStart(2, '0');
 }
 
 function shiftsOverlap(
@@ -100,20 +98,6 @@ function parseSingleMonth(text: string, yearMonth: { year: number; month: number
     shifts: allShifts,
     doctorNames: [...doctorNamesSet],
   };
-}
-
-/** Parse a single month's schedule text */
-export function parseScheduleText(text: string): ParseResult {
-  const monthMatch = text.match(/(\d{4})\.(\d{2})/);
-  if (!monthMatch) throw new Error('월 정보를 찾을 수 없습니다 (예: 2026.04)');
-
-  const year = parseInt(monthMatch[1]);
-  const month = parseInt(monthMatch[2]);
-
-  const branchMatch = text.match(/지점명\s*\n?\s*(.+?)점/);
-  const branchName = branchMatch ? branchMatch[1].trim() : '';
-
-  return parseSingleMonth(text, { year, month }, branchName);
 }
 
 /** Parse multiple months from a single pasted text block */

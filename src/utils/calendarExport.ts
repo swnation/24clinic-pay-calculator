@@ -1,4 +1,5 @@
-import type { Shift, Doctor } from '../types';
+import type { Shift } from '../types';
+import { pad } from './calendar';
 
 interface CalendarEvent {
   title: string;
@@ -11,10 +12,6 @@ interface MergedBlock {
   room: 1 | 2;
   startHour: number;
   endHour: number;
-}
-
-function pad(n: number): string {
-  return n.toString().padStart(2, '0');
 }
 
 function isConsecutive(endHour: number, startHour: number): boolean {
@@ -52,7 +49,6 @@ function mergeShiftsIntoBlocks(shifts: Shift[]): MergedBlock[] {
 
 export function generateCalendarEvents(
   shifts: Shift[],
-  _doctor: Doctor,
   branchName: string
 ): CalendarEvent[] {
   const byDate = new Map<string, Shift[]>();

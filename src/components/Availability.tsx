@@ -1,15 +1,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAppStore } from '../store';
+import { pad, DAY_NAMES, shiftMonth, buildCalendarDays } from '../utils/calendar';
 import type { AvailabilityData, DaySlotAvailability, SlotStatus } from '../services/firebase';
 
 interface Props {
   year: number;
   month: number;
   onMonthChange: (year: number, month: number) => void;
-}
-
-function pad(n: number): string {
-  return n.toString().padStart(2, '0');
 }
 
 type SlotKey = 'morning' | 'afternoon' | 'evening';
@@ -45,14 +42,13 @@ export default function Availability({ year, month, onMonthChange }: Props) {
 
   // Deadline check: can submit for next month only until deadline day of current month
   const deadline = state.availabilityDeadline || 20;
-  const now = new Date();
   const isDeadlinePassed = useMemo(() => {
     // Target month is year-month. You can submit until the previous month's deadline day at midnight.
     const targetDate = new Date(year, month - 1, 1); // 1st of target month
     // Deadline: previous month's deadline day, 23:59:59
     const deadlineDate = new Date(targetDate.getFullYear(), targetDate.getMonth() - 1, deadline, 23, 59, 59);
-    return now > deadlineDate;
-  }, [year, month, deadline, now]);
+    return new Date() > deadlineDate;
+  }, [year, month, deadline]);
 
   // Deadline passed and not admin → locked
   const deadlineLocked = isDeadlinePassed && !effectiveIsAdmin;
@@ -151,24 +147,12 @@ export default function Availability({ year, month, onMonthChange }: Props) {
     }
   }, [effectiveIsAdmin, viewAll, monthStr, loadAllAvailabilityForMonth]);
 
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(year, month - 1, 1);
-    const lastDay = new Date(year, month, 0);
-    const startDayOfWeek = firstDay.getDay();
-    const totalDays = lastDay.getDate();
-    const days: (number | null)[] = [];
-    for (let i = 0; i < startDayOfWeek; i++) days.push(null);
-    for (let d = 1; d <= totalDays; d++) days.push(d);
-    while (days.length % 7 !== 0) days.push(null);
-    return days;
-  }, [year, month]);
+  const calendarDays = useMemo(() => buildCalendarDays(year, month), [year, month]);
 
   const allDateStrs = useMemo(() => {
     const lastDay = new Date(year, month, 0).getDate();
     return Array.from({ length: lastDay }, (_, i) => `${year}-${pad(month)}-${pad(i + 1)}`);
   }, [year, month]);
-
-  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
 
   const toggleSlot = (dateStr: string, slot: SlotKey) => {
     if (!editing) return;
@@ -208,15 +192,7 @@ export default function Availability({ year, month, onMonthChange }: Props) {
 
   const clearUnset = () => {
     if (!editing) return;
-    const newDays: DaysMap = {};
-    for (const [dateStr, dayData] of Object.entries(days)) {
-      const cleaned: DaySlotAvailability = {};
-      if (dayData.note) cleaned.note = dayData.note;
-      // Remove all slot statuses
-      if (cleaned.note) newDays[dateStr] = cleaned;
-    }
-    // Keep only days with explicit statuses set by user (none after clearing)
-    // Actually, clear means set all to undecided
+    // 메모만 남기고 모든 슬롯 상태(가능/불가)를 초기화
     const cleared: DaysMap = {};
     for (const [dateStr, dayData] of Object.entries(days)) {
       if (dayData.note) cleared[dateStr] = { note: dayData.note };
@@ -276,8 +252,8 @@ export default function Availability({ year, month, onMonthChange }: Props) {
     return { avail, unavail };
   }, [days]);
 
-  const prevMonth = () => { if (month === 1) onMonthChange(year - 1, 12); else onMonthChange(year, month - 1); };
-  const nextMonth = () => { if (month === 12) onMonthChange(year + 1, 1); else onMonthChange(year, month + 1); };
+  const prevMonth = () => { const r = shiftMonth(year, month, -1); onMonthChange(r.year, r.month); };
+  const nextMonth = () => { const r = shiftMonth(year, month, 1); onMonthChange(r.year, r.month); };
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -366,7 +342,7 @@ export default function Availability({ year, month, onMonthChange }: Props) {
       <div className={`bg-white rounded-lg border border-gray-200 overflow-hidden mb-3 ${(!editing || deadlineLocked) ? 'opacity-60 pointer-events-none' : ''}`}>
         <div className="grid grid-cols-7">
           {/* Header row */}
-          {dayNames.map((name, i) => (
+          {DAY_NAMES.map((name, i) => (
             <div key={name} className={`text-center text-[10px] font-bold py-1.5 border-b bg-gray-50 ${
               i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-gray-600'
             }`}>{name}</div>

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { Shift } from '../types';
 import { useAppStore } from '../store';
 import { isHolidayOrSunday, isSaturday, getHolidayName } from '../utils/holidays';
+import { pad, DAY_NAMES, shiftMonth, buildCalendarDays, TIME_SLOT_KEYS, buildStructuredShifts, hasRoom2, doctorName, doctorColor } from '../utils/calendar';
 import ShiftModal from './ShiftModal';
 import ScheduleImport from './ScheduleImport';
 
@@ -9,10 +10,6 @@ interface Props {
   year: number;
   month: number;
   onMonthChange: (year: number, month: number) => void;
-}
-
-function pad(n: number): string {
-  return n.toString().padStart(2, '0');
 }
 
 function ShiftBadge({ shift, doctorName, doctorColor, filtered, onClick }: {
@@ -46,63 +43,19 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
   const monthStr = `${year}-${pad(month)}`;
   const shifts = getShiftsForMonth(monthStr);
 
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(year, month - 1, 1);
-    const lastDay = new Date(year, month, 0);
-    const startDayOfWeek = firstDay.getDay();
-    const totalDays = lastDay.getDate();
-
-    const days: (number | null)[] = [];
-    for (let i = 0; i < startDayOfWeek; i++) days.push(null);
-    for (let d = 1; d <= totalDays; d++) days.push(d);
-    while (days.length % 7 !== 0) days.push(null);
-
-    return days;
-  }, [year, month]);
-
-  type TimeSlotKey = 'morning' | 'afternoon' | 'evening';
-
-  const getTimeSlotKey = (startHour: number): TimeSlotKey => {
-    if (startHour < 14) return 'morning';
-    if (startHour < 19) return 'afternoon';
-    return 'evening';
-  };
-
-  const timeSlots: TimeSlotKey[] = ['morning', 'afternoon', 'evening'];
+  const calendarDays = useMemo(() => buildCalendarDays(year, month), [year, month]);
 
   // Build structured data: date -> { morning/afternoon/evening } -> { room1, room2 }
-  const structuredShifts = useMemo(() => {
-    const map = new Map<string, Record<TimeSlotKey, { room1: Shift[]; room2: Shift[] }>>();
-    for (const s of shifts) {
-      if (!map.has(s.date)) {
-        map.set(s.date, {
-          morning: { room1: [], room2: [] },
-          afternoon: { room1: [], room2: [] },
-          evening: { room1: [], room2: [] },
-        });
-      }
-      const dayData = map.get(s.date)!;
-      const slot = getTimeSlotKey(s.startHour);
-      if (s.room === 1) dayData[slot].room1.push(s);
-      else dayData[slot].room2.push(s);
-    }
-    return map;
-  }, [shifts]);
+  const structuredShifts = useMemo(() => buildStructuredShifts(shifts), [shifts]);
 
   // Month-level Room 2 detection for consistent grid
-  const monthHasRoom2 = useMemo(() => shifts.some(s => s.room === 2), [shifts]);
+  const monthHasRoom2 = useMemo(() => hasRoom2(shifts), [shifts]);
 
-  const getDoctorName = (id: string) => state.doctors.find(d => d.id === id)?.name || '?';
-  const getDoctorColor = (id: string) => state.doctors.find(d => d.id === id)?.color || '#E0E0E0';
+  const getDoctorName = (id: string) => doctorName(state.doctors, id);
+  const getDoctorColor = (id: string) => doctorColor(state.doctors, id);
 
-  const prevMonth = () => {
-    if (month === 1) onMonthChange(year - 1, 12);
-    else onMonthChange(year, month - 1);
-  };
-  const nextMonth = () => {
-    if (month === 12) onMonthChange(year + 1, 1);
-    else onMonthChange(year, month + 1);
-  };
+  const prevMonth = () => { const r = shiftMonth(year, month, -1); onMonthChange(r.year, r.month); };
+  const nextMonth = () => { const r = shiftMonth(year, month, 1); onMonthChange(r.year, r.month); };
 
   const toggleFilter = (doctorId: string) => {
     setFilterDoctors(prev => {
@@ -118,8 +71,6 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
-
-  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
 
   return (
     <div className="-mx-4 sm:mx-0">
@@ -168,7 +119,7 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
       <div className="overflow-x-auto bg-white">
         <div className="grid grid-cols-7 border-t border-l border-gray-400 min-w-[840px]">
           {/* Day names - match original: dark bg, white text */}
-          {dayNames.map((name, i) => (
+          {DAY_NAMES.map((name, i) => (
             <div
               key={name}
               className={`text-center text-xs font-bold py-1.5 sm:py-2 border-b border-r border-gray-400 ${
@@ -213,7 +164,7 @@ export default function Calendar({ year, month, onMonthChange }: Props) {
 
                 {/* Fixed 3-row × 2-column grid: morning / afternoon / evening × Room 1 / Room 2 */}
                 <div className="flex flex-col">
-                  {timeSlots.map((slot, slotIdx) => {
+                  {TIME_SLOT_KEYS.map((slot, slotIdx) => {
                     const r1 = dayData?.[slot]?.room1 || [];
                     const r2 = dayData?.[slot]?.room2 || [];
                     return (

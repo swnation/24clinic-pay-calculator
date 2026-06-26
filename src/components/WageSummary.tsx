@@ -3,15 +3,12 @@ import type { RatesBySlot, DayType, TimeSlot } from '../types';
 import { DAY_TYPE_LABELS, TIME_SLOT_LABELS, rateKey } from '../types';
 import { useAppStore } from '../store';
 import { getEffectiveRates, getEffectiveRatesWithPersonal, calculateMonthlyWage, calculateWeeklyHours } from '../utils/wageCalculator';
+import { pad, shiftMonth } from '../utils/calendar';
 
 interface Props {
   year: number;
   month: number;
   onMonthChange: (year: number, month: number) => void;
-}
-
-function pad(n: number): string {
-  return n.toString().padStart(2, '0');
 }
 
 const DAY_TYPES: DayType[] = ['weekday', 'saturday', 'sunday', 'holiday'];
@@ -58,14 +55,8 @@ export default function WageSummary({ year, month, onMonthChange }: Props) {
 
   const doctor = state.doctors.find(d => d.id === effectiveDoctor);
 
-  const prevMonth = () => {
-    if (month === 1) onMonthChange(year - 1, 12);
-    else onMonthChange(year, month - 1);
-  };
-  const nextMonth = () => {
-    if (month === 12) onMonthChange(year + 1, 1);
-    else onMonthChange(year, month + 1);
-  };
+  const prevMonth = () => { const r = shiftMonth(year, month, -1); onMonthChange(r.year, r.month); };
+  const nextMonth = () => { const r = shiftMonth(year, month, 1); onMonthChange(r.year, r.month); };
 
   return (
     <div className="max-w-2xl mx-auto">

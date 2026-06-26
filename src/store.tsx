@@ -39,7 +39,6 @@ interface AppContextType {
   addSpecialRatePeriod: (period: Omit<SpecialRatePeriod, 'id'>) => void;
   removeSpecialRatePeriod: (id: string) => void;
   toggleHoliday: (date: string) => void;
-  setCustomHolidays: (dates: string[]) => void;
   setBranchName: (name: string) => void;
   getShiftsForMonth: (month: string) => Shift[];
   getShiftsForDoctor: (doctorId: string, month: string) => Shift[];
@@ -354,7 +353,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const setCustomHolidays = (dates: string[]) => setState(s => ({ ...s, customHolidays: dates }));
   const setBranchName = (name: string) => setState(s => ({ ...s, branchName: name }));
 
   const getShiftsForMonth = (month: string): Shift[] => state.shifts.filter(s => s.date.startsWith(month));
@@ -539,7 +537,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addShift, updateShift, removeShift, bulkImport,
       setDefaultRates, setBranchMonthlyRate, removeBranchMonthlyRate,
       addSpecialRatePeriod, removeSpecialRatePeriod,
-      toggleHoliday, setCustomHolidays, setBranchName,
+      toggleHoliday, setBranchName,
       getShiftsForMonth, getShiftsForDoctor,
       importData, resetData,
       setAvailabilityDeadline,

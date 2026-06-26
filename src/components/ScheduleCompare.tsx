@@ -2,23 +2,12 @@ import { useState, useRef, useMemo, useEffect } from 'react';
 import type { Shift } from '../types';
 import { useAppStore } from '../store';
 import { isHolidayOrSunday, isSaturday, getHolidayName } from '../utils/holidays';
+import { pad, DAY_NAMES, shiftMonth, buildCalendarDays, TIME_SLOT_KEYS, buildStructuredShifts, hasRoom2, doctorName, doctorColor } from '../utils/calendar';
 
 interface Props {
   year: number;
   month: number;
   onMonthChange: (year: number, month: number) => void;
-}
-
-function pad(n: number): string {
-  return n.toString().padStart(2, '0');
-}
-
-type TimeSlotKey = 'morning' | 'afternoon' | 'evening';
-
-function getTimeSlotKey(startHour: number): TimeSlotKey {
-  if (startHour < 14) return 'morning';
-  if (startHour < 19) return 'afternoon';
-  return 'evening';
 }
 
 export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
@@ -30,7 +19,6 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const [overlayOffset, setOverlayOffset] = useState({ x: 0, y: 0 });
   const [overlayScale, setOverlayScale] = useState(1);
   const fileRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   // Calibration: cell + badge position/size
   type CalibStep = null | 'topLeft' | 'bottomRight' | 'enterDay' | 'badgeTop' | 'badgeBottom';
@@ -85,8 +73,8 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   const shifts = getShiftsForMonth(monthStr);
   const filteredCount = filterDoctor === 'all' ? shifts.length : shifts.filter(s => s.doctorId === filterDoctor).length;
 
-  const getDoctorName = (id: string) => state.doctors.find(d => d.id === id)?.name || '?';
-  const getDoctorColor = (id: string) => state.doctors.find(d => d.id === id)?.color || '#E0E0E0';
+  const getDoctorName = (id: string) => doctorName(state.doctors, id);
+  const getDoctorColor = (id: string) => doctorColor(state.doctors, id);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -115,48 +103,18 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
     return () => window.removeEventListener('keydown', handleKey);
   }, [viewMode, image]);
 
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(year, month - 1, 1);
-    const lastDay = new Date(year, month, 0);
-    const startDayOfWeek = firstDay.getDay();
-    const totalDays = lastDay.getDate();
-    const days: (number | null)[] = [];
-    for (let i = 0; i < startDayOfWeek; i++) days.push(null);
-    for (let d = 1; d <= totalDays; d++) days.push(d);
-    while (days.length % 7 !== 0) days.push(null);
-    return days;
-  }, [year, month]);
-
+  const calendarDays = useMemo(() => buildCalendarDays(year, month), [year, month]);
 
   // Build structured data: date -> { morning/afternoon/evening } -> { room1, room2 }
-  const structuredShifts = useMemo(() => {
-    const map = new Map<string, Record<TimeSlotKey, { room1: Shift[]; room2: Shift[] }>>();
-    for (const s of shifts) {
-      if (!map.has(s.date)) {
-        map.set(s.date, {
-          morning: { room1: [], room2: [] },
-          afternoon: { room1: [], room2: [] },
-          evening: { room1: [], room2: [] },
-        });
-      }
-      const dayData = map.get(s.date)!;
-      const slot = getTimeSlotKey(s.startHour);
-      if (s.room === 1) dayData[slot].room1.push(s);
-      else dayData[slot].room2.push(s);
-    }
-    return map;
-  }, [shifts]);
+  const structuredShifts = useMemo(() => buildStructuredShifts(shifts), [shifts]);
 
   // Month-level Room 2 detection for consistent grid
-  const monthHasRoom2 = useMemo(() => shifts.some(s => s.room === 2), [shifts]);
-
-  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-  const timeSlots: TimeSlotKey[] = ['morning', 'afternoon', 'evening'];
+  const monthHasRoom2 = useMemo(() => hasRoom2(shifts), [shifts]);
 
   const renderCalendar = (transparent = false) => (
     <div className="overflow-x-auto">
       <div className={`grid grid-cols-7 min-w-[840px] ${transparent ? '' : 'border-t border-l border-gray-400'}`}>
-        {dayNames.map((name, i) => (
+        {DAY_NAMES.map((name, i) => (
           <div key={name} className={`text-center text-xs font-bold py-1.5 ${transparent
             ? 'text-transparent select-none'
             : `border-b border-r border-gray-400 ${
@@ -179,7 +137,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 {holiday && <span className="text-[7px] text-red-500">{holiday}</span>}
               </div>
               <div className="flex flex-col">
-                {timeSlots.map((slot, slotIdx) => {
+                {TIME_SLOT_KEYS.map((slot, slotIdx) => {
                   const r1 = dayData?.[slot]?.room1 || [];
                   const r2 = dayData?.[slot]?.room2 || [];
                   return (
@@ -218,13 +176,13 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
   );
 
   return (
-    <div ref={containerRef}>
+    <div>
       {/* Month navigation */}
       <div className="flex items-center justify-center gap-6 mb-3">
-        <button onClick={() => { if (month === 1) onMonthChange(year - 1, 12); else onMonthChange(year, month - 1); }}
+        <button onClick={() => { const r = shiftMonth(year, month, -1); onMonthChange(r.year, r.month); }}
           className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none">&lt;</button>
         <h2 className="text-lg font-bold">{year}.{pad(month)}</h2>
-        <button onClick={() => { if (month === 12) onMonthChange(year + 1, 1); else onMonthChange(year, month + 1); }}
+        <button onClick={() => { const r = shiftMonth(year, month, 1); onMonthChange(r.year, r.month); }}
           className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded text-lg select-none">&gt;</button>
       </div>
 
@@ -429,7 +387,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 // Collect room1 and room2 shifts by slot
                 const r1Shifts: Shift[] = [];
                 const r2Shifts: Shift[] = [];
-                for (const slot of timeSlots) {
+                for (const slot of TIME_SLOT_KEYS) {
                   r1Shifts.push(...(dayData[slot]?.room1 || []));
                   r2Shifts.push(...(dayData[slot]?.room2 || []));
                 }
@@ -445,7 +403,7 @@ export default function ScheduleCompare({ year, month, onMonthChange }: Props) {
                 const slotH = (grid.cellH - badgeOffsetY) / 3;
                 const renderRoomBadges = (leftOffset: number) => {
                   const badges: React.ReactNode[] = [];
-                  timeSlots.forEach((slot, slotIdx) => {
+                  TIME_SLOT_KEYS.forEach((slot, slotIdx) => {
                     const roomShifts = leftOffset === 0 ? (dayData[slot]?.room1 || []) : (dayData[slot]?.room2 || []);
                     roomShifts.forEach((s, i) => {
                       const dimmed = filterDoctor !== 'all' && s.doctorId !== filterDoctor;

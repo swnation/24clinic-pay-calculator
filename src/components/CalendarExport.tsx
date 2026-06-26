@@ -1,17 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '../store';
 import { generateCalendarEvents, generateICS, downloadICS } from '../utils/calendarExport';
+import { pad, DAY_NAMES, shiftMonth } from '../utils/calendar';
 
 interface Props {
   year: number;
   month: number;
   onMonthChange: (year: number, month: number) => void;
 }
-
-function pad(n: number): string {
-  return n.toString().padStart(2, '0');
-}
-
 
 export default function CalendarExport({ year, month, onMonthChange }: Props) {
   const { state, getShiftsForDoctor } = useAppStore();
@@ -28,7 +24,7 @@ export default function CalendarExport({ year, month, onMonthChange }: Props) {
 
   const events = useMemo(() => {
     if (!doctor) return [];
-    return generateCalendarEvents(doctorShifts, doctor, state.branchName);
+    return generateCalendarEvents(doctorShifts, state.branchName);
   }, [doctorShifts, doctor, state.branchName]);
 
   const handleExport = () => {
@@ -38,16 +34,8 @@ export default function CalendarExport({ year, month, onMonthChange }: Props) {
     downloadICS(ics, filename);
   };
 
-  const prevMonth = () => {
-    if (month === 1) onMonthChange(year - 1, 12);
-    else onMonthChange(year, month - 1);
-  };
-  const nextMonth = () => {
-    if (month === 12) onMonthChange(year + 1, 1);
-    else onMonthChange(year, month + 1);
-  };
-
-  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+  const prevMonth = () => { const r = shiftMonth(year, month, -1); onMonthChange(r.year, r.month); };
+  const nextMonth = () => { const r = shiftMonth(year, month, 1); onMonthChange(r.year, r.month); };
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -114,7 +102,7 @@ export default function CalendarExport({ year, month, onMonthChange }: Props) {
             <div className="divide-y">
               {events.map((event, idx) => {
                 const dateObj = new Date(event.date + 'T00:00:00');
-                const dayName = dayNames[dateObj.getDay()];
+                const dayName = DAY_NAMES[dateObj.getDay()];
                 const dateLabel = `${dateObj.getMonth() + 1}/${dateObj.getDate()} (${dayName})`;
                 return (
                   <div key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">

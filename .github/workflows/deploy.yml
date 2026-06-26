@@ -1,8 +1,12 @@
 name: Deploy to GitHub Pages
 
+# 앱은 Firebase Hosting(clinic-schedule-calc.firebaseapp.com)에서 서빙한다.
+# Google 로그인이 인증 도메인과 같은 출처에서만 안정적으로 동작하기 때문.
+# GitHub Pages(기존 북마크 주소)는 firebaseapp.com 으로 리다이렉트만 한다.
+
 on:
   push:
-    branches: ['main', 'claude/hospital-wage-calculator-slcq9']
+    branches: ['main']
 
 permissions:
   contents: read
@@ -17,16 +21,30 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run build
+      - name: Generate redirect page to Firebase Hosting
+        run: |
+          mkdir -p _site
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="ko">
+            <head>
+              <meta charset="UTF-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+              <title>24시 열린의원 급여 계산기</title>
+              <meta http-equiv="refresh" content="0; url=https://clinic-schedule-calc.firebaseapp.com/" />
+              <script>location.replace("https://clinic-schedule-calc.firebaseapp.com/");</script>
+            </head>
+            <body>
+              <p>새 주소로 이동합니다…
+                <a href="https://clinic-schedule-calc.firebaseapp.com/">열리지 않으면 여기를 누르세요</a>
+              </p>
+            </body>
+          </html>
+          HTML
+          cp _site/index.html _site/404.html
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: ./dist
+          path: ./_site
 
   deploy:
     needs: build
