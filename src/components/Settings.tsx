@@ -170,7 +170,7 @@ function UserManagement() {
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
               profile.role === 'admin' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'
             }`}>
-              {profile.role === 'admin' ? '관리자' : '의사'}
+              {profile.role === 'admin' ? '관리자' : '일반'}
             </span>
             <div className="flex gap-1">
               {/* 자기 자신을 admin에서 해제할 수 없음 */}
@@ -179,7 +179,7 @@ function UserManagement() {
                   onClick={() => setRole(uid, profile.role === 'admin' ? 'doctor' : 'admin')}
                   className="text-[10px] text-blue-600 hover:underline"
                 >
-                  {profile.role === 'admin' ? '의사로' : '관리자로'}
+                  {profile.role === 'admin' ? '일반으로' : '관리자로'}
                 </button>
               )}
               <button

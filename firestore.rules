@@ -1,22 +1,42 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // 요청자가 관리자(admin)인지: 본인 user 문서의 role로 판단
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    // 요청자 본인 프로필에 연결된 doctorId
+    function myDoctorId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.doctorId;
+    }
+
     // 사용자 프로필
     match /users/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read:   if isSignedIn();                       // 등록 시 이름 중복확인 + 관리자 목록
+      allow create: if isSignedIn() && request.auth.uid == uid; // 본인 가입
+      allow update: if isSignedIn() && (request.auth.uid == uid || isAdmin()); // 본인 수정 or 관리자
+      allow delete: if isAdmin();                          // 관리자만 계정 삭제
     }
 
     // 공유 앱 데이터 (의사 목록, 시프트, 요율 등)
     match /appData/{doc} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn();   // 최초 시드(문서가 없을 때만)
+      allow update: if isAdmin();      // 이후 편집/자동저장은 관리자만
+      allow delete: if false;
     }
 
-    // 가능일 (의사별 월별)
+    // 가능일 (의사별 월별) - 문서 id: {YYYY-MM}_{doctorId}
     match /availability/{doc} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read:  if isSignedIn();    // 관리자 전체조회 + 다른 의사 보기
+      allow write: if isSignedIn()
+        && (isAdmin() || request.resource.data.doctorId == myDoctorId()); // 본인 것만 작성
     }
   }
 }
